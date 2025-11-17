@@ -59,9 +59,11 @@ def validate_and_test_api_key(api_key):
     
     # ちゃろさんご指定のモデルリスト
     model_candidates = [
-        "models/gemini-1.5-flash-latest",
-        "models/gemini-pro",
-        "models/gemini-1.0-pro"
+        "models/gemini-2.5-flash",
+        "models/gemini-flash-latest",
+        "models/gemini-2.5-pro",
+        "models/gemini-pro-latest",
+        "models/gemini-2.0-flash-001"
     ]
     
     last_error = None
@@ -314,7 +316,7 @@ def show_main_app():
                     st.pyplot(fig_graph); plt.close(fig_graph)
                     try:
                         genai.configure(api_key=st.session_state.api_key)
-                        model_name_to_use = st.session_state.get("selected_model", "gemini-1.5-flash-latest")
+                        model_name_to_use = st.session_state.get("selected_model", "gemini-2.5-flash")
                         model = genai.GenerativeModel(model_name_to_use)
                         messages_summary = smart_extract_text(messages, max_chars=8000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
