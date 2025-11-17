@@ -1,27 +1,3 @@
-fpdf.errors.FPDFUnicodeEncodingException: Character "恋" at index 0 in text is outside the range of characters supported by the font used: "helvetica". Please consider using a Unicode font.```
-
-これは、**「PDFを作成する際に、『恋』という日本語の文字を、日本語に対応していない『helvetica』というフォントで書き込もうとして失敗しました」**という意味です。
-
-これは、PDFを作成する`create_pdf`関数の中で、**タイトルなどの日本語を書き込む前に、日本語フォントを設定する処理が抜けていた**ことが原因です。AIの鑑定結果本文を書き込む部分は日本語フォントが設定されていましたが、その前の部分がデフォルトの英語フォントのままになっていました。
-
----
-
-### 最終解決策：PDF生成とAIモデル呼び出しの完全版
-
-以下の2つの修正で、すべての問題が解決し、さらにアプリケーションがより堅牢になります。
-
-1.  **PDF生成の修正**: `create_pdf`関数の**一番最初**に日本語フォントを設定し、すべての日本語が正しく表示されるようにします。
-2.  **AIモデル呼び出しの強化**: ちゃろさんの素晴らしいアイデアである「モデル名の候補リスト」を実装し、Googleの仕様変更に将来的に強くなるように改良します。
-
----
-
-### 【最終完成版】すべての修正と改善を反映した `app.py` の全コード
-
-それでは、**ちゃろさんのご指示通りデバッグ機能を完全に残し**、上記2点の最終修正と改善をすべて盛り込んだ、**最終完成版の`app.py`**を提供します。
-
-お手元の`app.py`の中身を、以下のコードで**まるごと**置き換えてください。
-
-```python
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
