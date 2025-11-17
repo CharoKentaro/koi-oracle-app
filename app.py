@@ -356,8 +356,13 @@ def show_main_app():
                     previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
                     if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
                     
-                    color_map_graph = {"1. ...": ("#ffb6c1", ...), "2. ...": ..., "3. ...": ...}
-                    line_color, fill_color = color_map_graph.get(character, ("tab:pink", ...))
+                    color_map_graph = {
+                        "1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"),       # line_color, fill_color
+                        "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"),
+                        "3. 星の言葉で語る、ミステリアスな占い師系": ("#9370db", "#e6e6fa")
+                    }
+                    # 選択されたキャラクターに対応する色を取得（見つからない場合はピンクをデフォルトに）
+                    line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
 
                     temp_data, trend = calculate_temperature(messages)
                     fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
