@@ -176,13 +176,9 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
 - ユーザーの悩み: {counseling_text}
 """
     
-    # --- 前回データがある場合の指示 ---
     comparison_instruction = ""
     if previous_data:
-        # ★★★★★ ここが重要 ★★★★★
-        # まず最初に prev_score を定義します
         prev_score = previous_data.get('pulse_score', 0)
-        
         prompt += f"""
 # 過去の鑑定データ
 - 前回の鑑定日: {previous_data.get('date', '不明')}
@@ -195,8 +191,6 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
 """
         comparison_instruction = f"""   **【前回との比較】**: 前回の鑑定では脈あり度が **{prev_score}%** でした。今回の結果と比較し、「前回の{prev_score}%から、今回は〇〇%へと変化しました」のように、数値を正確に使って必ず言及してください。"""
     
-    # ★★★★★ ここが重要 ★★★★★
-    # ここで改行がされていなかったのを修正しました
     prompt += f"""
 # 基本データ分析
 - 会話の温度グラフの傾向: {trend}
@@ -208,9 +202,12 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
 2. **脈ありシグナルのスコア化**: 以下の項目を0〜10点で評価し、総合的な「脈あり度」をパーセンテージで算出してください。
    - 質問返しの積極性, ポジティブな絵文字・表現の使用頻度, 返信間隔の安定性・速さ, 相手からの賞賛・共感の言葉, 会話を広げようとする意図
    
-   **【最重要】出力形式の厳守**:
-   以下の形式を絶対に守って出力してください。
-   【総合脈あり度】: 〇〇%
+   **【絶対厳守】出力形式:**
+   以下の形式を絶対に守ってください。他の表現は一切使わず、数値は太字（**）にしないでください。
+   
+   【総合脈あり度】: 80%
+   
+   （上記の例のように、必ず「【総合脈あり度】: 数字%」の形式で出力してください）
 {comparison_instruction}
    
    - なぜそのスコアになったのか、根拠を優しく解説してください。
@@ -257,40 +254,40 @@ def load_previous_diagnosis(user_id, partner_name):
 
 def extract_pulse_score_from_response(ai_response):
     """
-    AIレスポンスから脈あり度を抽出する、さらに堅牢になった「最強の抽出器」。
-    改行や「約80%」のような多様な表現に、より強力に対応します。
+    AIレスポンスから脈あり度を抽出する超強力版。
+    太字（**）や、あらゆる表現パターンに対応します。
     """
-    # 「約」などの言葉や、多様な表現に対応できるよう、パターンを強化
+    # AIが **18%** のように太字で出力しても対応できるよう、パターンを強化
     patterns = [
-        # パターン1: 「【総合脈あり度】: 80%」のような最も典型的な形式（「約」などに対応）
-        r'【総合脈あり度】\s*[:：]?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
+        # 基本パターン（太字対応）
+        r'【総合脈あり度】\s*[:：]?\s*(?:\*\*|約|およそ|大体)?\s*(\d{1,3})\s*(?:\*\*|[%％パーセント])',
+        r'総合脈あり度\s*[:：]?\s*(?:\*\*|約|およそ|大体)?\s*(\d{1,3})\s*(?:\*\*|[%％パーセント])',
         
-        # パターン2: カッコがない「総合脈あり度: 80%」の形式
-        r'総合脈あり度\s*[:：]?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
+        # 「は」「が」などを含むパターン（太字対応）
+        r'脈あり度[はが]?\s*(?:\*\*|約|およそ|大体)?\s*(\d{1,3})\s*(?:\*\*|[%％パーセント])',
         
-        # パターン3: 「脈あり度は80%」のような、より文章的な形式
-        r'脈あり度は?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
+        # 数字が先に来るパターン
+        r'(\d{1,3})\s*[%％パーセント](?:くらい|ほど|程度)?(?:の)?(?:脈あり|可能性)',
         
-        # パターン4: 「80%くらいの脈あり」のように、数字が先に来る形式
-        r'(\d{1,3})\s*[%％](?:くらい|ほど|の)脈あり',
-        
-        # パターン5: 「スコアは80%」のような形式
-        r'スコアは?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
+        # 「スコア」を含むパターン（太字対応）
+        r'スコア[はが]?\s*(?:\*\*|約|およそ|大体)?\s*(\d{1,3})\s*(?:\*\*|[%％パーセント])',
     ]
 
-    for pattern in patterns:
-        match = re.search(pattern, ai_response, flags=re.DOTALL)
+    for i, pattern in enumerate(patterns):
+        # re.IGNORECASE を追加して、大文字・小文字の違いを無視
+        match = re.search(pattern, ai_response, flags=re.DOTALL | re.IGNORECASE)
         if match:
             try:
                 score = int(match.group(1))
                 if 0 <= score <= 100:
+                    # どのパターンで成功したかデバッグ表示すると、今後の改善に役立ちます
+                    st.info(f"（デバッグ情報：脈あり度抽出パターン {i+1} で成功）")
                     return score
             except (ValueError, IndexError):
                 continue
     
     st.warning("⚠️ AIの応答から脈あり度のパーセンテージを自動で読み取れませんでした。")
     return 0
-
 
 def extract_summary_from_response(ai_response):
     """
