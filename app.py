@@ -403,24 +403,21 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.set_font(font_name, '', 11)
     
     # 1. 見出し（###）を、大きく目立つ「h2」タグに変換する
-    #    タイトルの後に改行があってもなくても対応できるように改善
     html_text = re.sub(r'###\s*(.*?)\s*(\n|<br>|$)', r'<h2>\1</h2>', ai_response_text)
     
     # 2. 太字（**太字**）を「b」タグに変換する
     html_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', html_text)
 
     # 3. 通常の改行を、段落を意味する「p」タグに変換し、適度な間隔を空ける
-    #    連続した改行を一つの段落区切りにまとめる
     paragraphs = [f"<p>{p.strip()}</p>" for p in html_text.split('\n') if p.strip()]
     html_text = "".join(paragraphs)
 
     # h2タグ（見出し）の後には、さらにスペースを追加して、より見やすくする
     html_text = html_text.replace("</h2><p>", "</h2><p><br></p><p>")
     
-    # PDFに書き出す際のスタイルを設定
-    pdf.set_h1_font_size(18)
-    pdf.set_h2_font_size(16) # h2タグの文字サイズを16に設定
-    
+    # ★★★★★ ここが修正点 ★★★★★
+    # 存在しない命令（set_h1_font_size, set_h2_font_size）を削除しました。
+    # write_htmlが自動で見出しを大きくしてくれるので、これらの命令は不要です。
     pdf.write_html(html_text)
     
     # ===== 4. グラフページの作成 =====
@@ -435,10 +432,9 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.image(graph_img_buffer, x=x_position, y=pdf.get_y(), w=graph_width)
 
     # ===== 5. 最後のページにのみ、フッターを手動で描画 =====
-    # ★ 新しいページに移動させないため、一時的に自動改ページをオフにする
     pdf.set_auto_page_break(auto=False)
 
-    pdf.set_y(-25) # ページ下部から25mmの位置へ
+    pdf.set_y(-25) 
     pdf.set_font(font_name, '', 8)
     pdf.set_text_color(128, 128, 128)
     pdf.cell(0, 10, "本鑑定はAIによる心理分析です。", new_x="LMARGIN", new_y="NEXT", align='C')
