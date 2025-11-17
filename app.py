@@ -258,106 +258,146 @@ def load_previous_diagnosis(user_id, partner_name):
 def extract_pulse_score_from_response(ai_response):
     """
     AIレスポンスから脈あり度を抽出する、さらに堅牢になった「最強の抽出器」。
-    改行や多様な表現に、より強力に対応します。
+    改行や「約80%」のような多様な表現に、より強力に対応します。
     """
-    # 抽出パターンを、最も信頼性が高い（限定的）なものから順に並べています
+    # 「約」などの言葉や、多様な表現に対応できるよう、パターンを強化
     patterns = [
-        # パターン1: 「【総合脈あり度】: 80%」や「【総合脈あり度】\n80%」のような最も典型的な形式
-        r'【総合脈あり度】\s*[:：]?\s*(\d{1,3})\s*[%％]',
+        # パターン1: 「【総合脈あり度】: 80%」のような最も典型的な形式（「約」などに対応）
+        r'【総合脈あり度】\s*[:：]?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
         
         # パターン2: カッコがない「総合脈あり度: 80%」の形式
-        r'総合脈あり度\s*[:：]?\s*(\d{1,3})\s*[%％]',
+        r'総合脈あり度\s*[:：]?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
         
         # パターン3: 「脈あり度は80%」のような、より文章的な形式
-        r'脈あり度は?\s*(\d{1,3})\s*[%％]',
+        r'脈あり度は?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
         
         # パターン4: 「80%くらいの脈あり」のように、数字が先に来る形式
         r'(\d{1,3})\s*[%％](?:くらい|ほど|の)脈あり',
+        
+        # パターン5: 「スコアは80%」のような形式
+        r'スコアは?\s*(?:約|およそ|大体)?\s*(\d{1,3})\s*[%％]',
     ]
 
     for pattern in patterns:
-        # ★★★★★ ここが重要 ★★★★★
-        # re.DOTALL フラグを使い、「.」が改行文字にもマッチするようにします。
-        # これにより、AIが予期せぬ改行を入れてもパターンが途切れにくくなります。
         match = re.search(pattern, ai_response, flags=re.DOTALL)
         if match:
             try:
-                # マッチした部分から数値（グループ1）を取得します
                 score = int(match.group(1))
-                
-                # 0から100の範囲内かという最終チェック。ありえない数値を弾きます。
                 if 0 <= score <= 100:
-                    # 正常な値が見つかった瞬間に、その値を返して処理を終了します
                     return score
             except (ValueError, IndexError):
-                # 万が一、数値への変換に失敗した場合は、次のパターンに進みます
                 continue
     
-    # 全てのパターンを試しても有効な数値が見つからなかった場合
     st.warning("⚠️ AIの応答から脈あり度のパーセンテージを自動で読み取れませんでした。")
     return 0
 
 
 def extract_summary_from_response(ai_response):
     """
-    AI自身に鑑定結果を要約させることで、高品質なサマリーを生成します。
+    AI自身に鑑定結果を要約させることで、高品質なサマリーを生成します（改良版）。
+    エラー処理と堅牢な応答取得を実装しています。
     """
-    # ★★★★★ ここが改善点 ★★★★★
-    # 以前は単純に冒頭を切り取るだけでしたが、AIに要約を依頼する処理に変わりました。
     try:
         # AIへの接続情報を再設定
         genai.configure(api_key=st.session_state.api_key)
         
         # メインの鑑定で使われたモデルと同じモデルを使用
-        # Cookieから読み込むことで、ユーザーが選択した最新・最高のモデルを一貫して利用します
         model_name_to_use = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
         model = genai.GenerativeModel(model_name_to_use)
 
-        # AIに要約を依頼するための、専用の短いプロンプトを作成
-        summary_prompt = f"""以下の鑑定レポートを、次回の鑑定で過去のデータとして参照するために、100文字以内で最も重要なポイントを要約してください。
+        # AIに要約を依頼するための、より明確なプロンプト
+        summary_prompt = f"""以下の鑑定レポートの内容を、次回の鑑定で過去データとして参照するために、最も重要なポイントだけを **150文字以内** で要約してください。
 
+必ず以下の形式で出力してください：
+- 脈あり度の数値
+- 関係性の状態（例：順調、停滞、進展中など）
+- 重要な特徴（1〜2点）
+
+鑑定レポート:
 ---
-{ai_response}
+{ai_response[:2000]}
 ---
 
-要約:"""
+要約（150文字以内）:"""
 
-        # AIに要約を生成させる
+        # サマリー生成時にもセーフティ設定を緩和
+        safety_settings = [
+            {"category": c, "threshold": "BLOCK_NONE"} 
+            for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", 
+                     "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]
+        ]
+
+        # AIに要約を生成させる（温度を下げて安定化）
         summary_response = model.generate_content(
             summary_prompt,
-            generation_config={"max_output_tokens": 200}, # 念のため200文字まで許可
-            safety_settings=[{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
+            generation_config={"max_output_tokens": 300, "temperature": 0.3},
+            safety_settings=safety_settings
         )
         
-        # AIが生成した要約テキストを取得
+        # より堅牢な応答取得処理
         summary_text = ""
         try:
-            summary_text = summary_response.text.strip()
+            if hasattr(summary_response, 'text'):
+                summary_text = summary_response.text.strip()
         except Exception:
-             if hasattr(summary_response, "parts") and summary_response.parts:
-                summary_text = summary_response.parts[0].text.strip()
+            pass # 失敗しても次の方法を試す
         
-        if not summary_text: # 要約が空だった場合の保険
-            raise ValueError("AI summary was empty.")
-            
-        # 万が一要約が長すぎた場合に備えて、最後の保険で切り詰める
-        return summary_text[:200] + '...' if len(summary_text) > 200 else summary_text
+        if not summary_text:
+            try:
+                if hasattr(summary_response, "parts") and summary_response.parts:
+                    summary_text = "".join([part.text for part in summary_response.parts if hasattr(part, 'text')]).strip()
+            except Exception:
+                pass # これも失敗したら、最終的に空のままになる
+
+        # 応答が空だった場合のエラー処理
+        if not summary_text:
+            st.warning("⚠️ AIによる要約が空でした。セーフティフィルターまたは一時的なAPIエラーの可能性があります。")
+            if hasattr(summary_response, 'prompt_feedback'):
+                st.info(f"🔍 AIからのフィードバック: {summary_response.prompt_feedback}")
+            raise ValueError("AI summary was empty - falling back to manual extraction.")
+        
+        # 長すぎる場合は切り詰め
+        if len(summary_text) > 200:
+            summary_text = summary_text[:200] + '...'
+        
+        return summary_text
 
     except Exception as e:
-        # もしAIによる要約生成に失敗した場合は、以前の方式で冒頭を切り取る（保険の処理）
+        # AI要約に失敗した場合の、改善されたフォールバック（保険）処理
         st.warning(f"AIによる高品質サマリーの生成に失敗しました。以前の方法で保存します。(エラー: {e})")
-        lines, summary = ai_response.split('\n'), ""
+        
+        lines = ai_response.split('\n')
+        summary_parts = []
+        
+        # 脈あり度に関する行を最優先で探す
         for line in lines:
-            if line.strip() and not line.startswith('#'): summary += line.strip() + " ";
-            if len(summary) > 200: break
-        return summary[:200] + '...'
-
+            if '脈あり度' in line or '総合' in line:
+                summary_parts.append(line.strip())
+                break # 見つかったらループを抜ける
+        
+        # 鑑定結果の本文から意味のある行を追加していく
+        for line in lines:
+            clean_line = line.strip()
+            if clean_line and not clean_line.startswith('#') and len(clean_line) > 15:
+                summary_parts.append(clean_line)
+                if len(" ".join(summary_parts)) > 150:
+                    break # ある程度の長さになったら終了
+        
+        summary = " ".join(summary_parts)
+        
+        # それでも要約が作れなかった場合の最終保険
+        if not summary:
+            return ai_response[:150] + '...'
+            
+        return summary[:200] + '...' if len(summary) > 200 else summary
 class MyPDF(FPDF, HTMLMixin):
     def footer(self):
         # ページ下部に自動で描画する処理を一旦なくす
         pass
 
 def create_pdf(ai_response_text, graph_img_buffer, character):
+
+
     # ===== 1. PDFの初期設定と、汎用的な余白設定 =====
     pdf = MyPDF(orientation='P', unit='mm', format='A4')
     pdf.set_auto_page_break(auto=True, margin=25)  # 下部マージンを25mmに設定
