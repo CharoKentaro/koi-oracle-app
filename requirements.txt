@@ -2,6 +2,6 @@ streamlit
 streamlit-cookies-manager
 google-generativeai
 matplotlib
-japanize-matplotlib
+japanize-matplotlib>=1.2.0
 wordcloud
 fpdf2
