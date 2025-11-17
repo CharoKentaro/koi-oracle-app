@@ -1,3 +1,4 @@
+
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -254,6 +255,7 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     if font_available:
         try:
             pdf.add_font('Japanese', '', font_path)
+            pdf.add_font('Japanese', 'B', font_path)  # Bold
             pdf.set_font('Japanese', '', 12)
         except Exception as e:
             st.warning(f"PDFへの日本語フォントの追加に失敗: {e}")
@@ -406,4 +408,3 @@ st.write("---")
 if not st.session_state.authenticated: show_login_screen()
 elif not st.session_state.api_key: show_api_key_screen()
 else: show_main_app()
-
