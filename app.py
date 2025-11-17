@@ -327,6 +327,7 @@ def show_main_app():
     st.info("💡 どんなに長いトーク履歴でも大丈夫。AIが自動で大切な部分だけを読み取って分析します。")
 
     if uploaded_file is not None:
+        # ファイルがアップロードされてからの処理全体をtry...exceptで囲む
         try:
             talk_data = uploaded_file.getvalue().decode("utf-8")
             messages, full_text = parse_line_chat(talk_data)
@@ -337,10 +338,7 @@ def show_main_app():
             
             with st.spinner("よく使われる言葉を分析中..."):
                 try:
-                    # 日本語フォントを探しに行く
                     font_path = get_japanese_font()
-                    
-                    # フォントが見つかればワードクラウドを試みる
                     if font_path and os.path.exists(font_path):
                         japanese_words = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]{2,}', full_text)
                         if japanese_words:
@@ -348,17 +346,10 @@ def show_main_app():
                             filtered_freq = {word: count for word, count in word_freq.most_common(50) if count >= 2}
                             if filtered_freq:
                                 wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white").generate_from_frequencies(filtered_freq)
-                                fig_wc, ax_wc = plt.subplots()
-                                ax_wc.imshow(wordcloud, interpolation='bilinear')
-                                ax_wc.axis("off")
-                                st.pyplot(fig_wc)
-                                plt.close(fig_wc)
+                                fig_wc, ax_wc = plt.subplots(); ax_wc.imshow(wordcloud, interpolation='bilinear'); ax_wc.axis("off"); st.pyplot(fig_wc); plt.close(fig_wc)
                     else:
-                        # フォントが見つからなかった場合
                         st.info("ℹ️ ワードクラウド用の日本語フォントが見つからないため、このステップをスキップします。")
-                
                 except Exception as e:
-                    # 上記の処理中にフォントエラーなどで失敗した場合
                     st.warning("⚠️ ワードクラウドの表示で小さな問題が発生しましたが、鑑定は問題なく続けられます。")
             
             st.write("---")
@@ -369,11 +360,10 @@ def show_main_app():
                     if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
                     
                     color_map_graph = {
-                        "1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"),       # line_color, fill_color
+                        "1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"),
                         "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"),
                         "3. 星の言葉で語る、ミステリアスな占い師系": ("#9370db", "#e6e6fa")
                     }
-                    # 選択されたキャラクターに対応する色を取得（見つからない場合はピンクをデフォルトに）
                     line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
 
                     temp_data, trend = calculate_temperature(messages)
@@ -397,7 +387,6 @@ def show_main_app():
                         messages_summary = smart_extract_text(messages, max_chars=5000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
                         
-                        # AIのセーフティ設定を調整（ブロックされにくくする）
                         safety_settings = [
                             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -408,7 +397,7 @@ def show_main_app():
                         response = model.generate_content(
                             final_prompt,
                             generation_config={"max_output_tokens": 6144, "temperature": 0.75},
-                            safety_settings=safety_settings # ← この設定を追加
+                            safety_settings=safety_settings
                         )
                         ai_response_text = response.text
                         
@@ -423,15 +412,21 @@ def show_main_app():
                     
                     except Exception as e:
                         st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
-                        # どんなエラーが起きているか、より具体的に表示する
                         with st.expander("🔧 詳細"):
                             st.code(f"{e}\n\n{traceback.format_exc()}")
-
+        
+        # SyntaxErrorの原因だった、消えていたexceptブロックをここに追加
+        except Exception as e:
+            st.error("💫 ごめんなさい、ファイルの読み込み中に予期しないエラーが発生しました。")
+            with st.expander("🔧 詳細"):
+                st.code(f"{traceback.format_exc()}")
+            
     with st.expander("⚙️ 設定"):
         if st.button("🔓 ログアウト"):
             for key in list(st.session_state.keys()): del st.session_state[key]
             cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
             st.rerun()
+
 
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
