@@ -368,7 +368,7 @@ def show_main_app():
                             model_name_to_use = st.session_state.selected_model
                         else:
                             # テストをスキップした場合、リストの先頭をデフォルトとして使う
-                            model_name_to_use = "models/gemini-1.5-flash-latest"
+                            model_name_to_use = "models/gemini-2.5-flash"
                         
                         st.info(f"（デバッグ情報：モデル '{model_name_to_use}' を使用して鑑定します）")
                         model = genai.GenerativeModel(model_name_to_use)
