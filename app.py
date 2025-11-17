@@ -305,6 +305,9 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.image(graph_img_buffer, x=x_position, y=pdf.get_y(), w=graph_width)
 
     # ===== 5. 最後のページにのみ、フッターを手動で描画 =====
+    # ★ 新しいページに移動させないため、一時的に自動改ページをオフにする
+    pdf.set_auto_page_break(auto=False)
+
     pdf.set_y(-25) # ページ下部から25mmの位置へ
     pdf.set_font(font_name, '', 8)
     pdf.set_text_color(128, 128, 128)
