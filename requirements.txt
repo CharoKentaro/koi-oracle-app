@@ -5,3 +5,4 @@ matplotlib
 japanize-matplotlib>=1.2.0
 wordcloud
 fpdf2
+python-3.11
