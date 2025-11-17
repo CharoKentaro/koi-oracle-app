@@ -285,6 +285,9 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
 # ---------------------------------------------------------------------
+# ---------------------------------------------------------------------
+# --- メインの実行ロジック ---
+# ---------------------------------------------------------------------
 def main():
     st.title("🌙 恋のオラクル AI星譚")
     st.caption("- 心の羅針盤 Edition -")
@@ -303,8 +306,7 @@ def main():
                 cookies["authenticated"] = "True"
                 cookies["user_id"] = user_id
                 cookies.save()
-                st.success("認証しました！画面を切り替えます...")
-                time.sleep(1)
+                # メッセージ表示を挟まずに即座にリラン
                 st.rerun()
             else:
                 st.error("認証に失敗しました。")
@@ -312,8 +314,10 @@ def main():
     # -----------------------------------------------------------------
     # --- APIキー設定画面のロジック ---
     elif not st.session_state.get("api_key", None):
-        st.success("認証に成功しました！")
+        # 認証成功のメッセージは、APIキー画面のヘッダーとして一度だけ表示されれば十分
         st.header("🔮 AI鑑定師との接続設定")
+        st.success("認証に成功しました！")
+        
         api_key_input = st.text_input("Gemini APIキーをここに貼り付けてください", type="password", key="api_input")
 
         if st.button("APIキーをテストして保存する", key="api_save_button"):
@@ -322,8 +326,7 @@ def main():
                 st.session_state.api_key = api_key_input
                 cookies["api_key"] = api_key_input
                 cookies.save()
-                st.success(message)
-                time.sleep(1)
+                # メッセージ表示を挟まずに即座にリラン
                 st.rerun()
             else:
                 st.error(message)
@@ -350,6 +353,7 @@ def main():
         st.info("💡 どんなに長いトーク履歴でも大丈夫。AIが自動で大切な部分だけを読み取って分析します。")
 
         if uploaded_file is not None:
+            # (この中の処理は変更ありません)
             try:
                 talk_data = uploaded_file.getvalue().decode("utf-8")
                 messages, full_text = parse_line_chat(talk_data)
@@ -378,7 +382,6 @@ def main():
                         previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
                         if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
                         
-                        # グラフの色設定を安全に行う
                         color_map_graph = {
                             "1. 優しく包み込む、お姉さん系": ("#ffb6c1", "#ffe4e1"),
                             "2. ロジカルに鋭く分析する、専門家系": ("#87ceeb", "#e0ffff"),
@@ -427,14 +430,12 @@ def main():
                 
         with st.expander("⚙️ 設定"):
             if st.button("🔓 ログアウト"):
-                # st.session_stateのキーをループで削除する代わりにclear()を使う
                 st.session_state.clear()
                 cookies.delete("authenticated")
                 cookies.delete("api_key")
                 cookies.delete("user_id")
                 cookies.save()
-                st.success("ログアウトしました。")
-                time.sleep(1)
+                # メッセージ表示を挟まずに即座にリラン
                 st.rerun()
 
 if __name__ == "__main__":
@@ -445,4 +446,3 @@ if __name__ == "__main__":
         st.info("このエラーは、ページの更新中に発生することがあります。ブラウザのページを再読み込み（リロード）すると解決する場合があります。")
         with st.expander("🔧 開発者向けエラー詳細"):
             st.code(traceback.format_exc())
-
