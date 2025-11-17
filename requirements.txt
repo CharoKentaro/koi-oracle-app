@@ -1,2 +1,7 @@
 streamlit
 streamlit-cookies-manager
+google-generativeai
+matplotlib
+japanize-matplotlib
+wordcloud
+fpdf2
