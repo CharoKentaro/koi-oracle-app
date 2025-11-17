@@ -280,134 +280,7 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
 # 画面描画関数
 # ---------------------------------------------------------------------
 
-def show_login_screen():
-    st.header("ようこそ、鑑定の世界へ")
-    user_id = st.text_input("BOOTHの購入者IDを入力してください", key="login_user_id")
-    if st.button("認証する", key="login_button"):
-        if user_id in VALID_USER_IDS:
-            st.session_state.authenticated = True
-            st.session_state.user_id = user_id
-            cookies["authenticated"] = "True"
-            cookies["user_id"] = user_id
-            cookies.save()
-            st.success("認証しました！画面を切り替えます...")
-            time.sleep(1)
-            st.rerun() 
-        else: st.error("認証に失敗しました。")
 
-def show_api_key_screen():
-    st.success("認証に成功しました！")
-    st.header("🔮 AI鑑定師との接続設定")
-    api_key_input = st.text_input("Gemini APIキーをここに貼り付けてください", type="password", key="api_input")
-    if st.button("APIキーをテストして保存する", key="api_save_button"):
-        is_valid, message = validate_and_test_api_key(api_key_input)
-        if is_valid:
-            st.session_state.api_key = api_key_input
-            cookies["api_key"] = api_key_input
-            cookies.save()
-            st.success(message)
-            time.sleep(1) 
-            st.rerun()    
-        else: st.error(message)
-
-
-def show_main_app():
-    st.success("✨ AI鑑定師との接続が完了しました！")
-    st.header("Step 1: 鑑定の準備")
-    
-    character = st.selectbox("🔮 どの鑑定師に占ってもらいますか？",("1. 優しく包み込む、お姉さん系", "2. ロジカルに鋭く分析する、専門家系", "3. 星の言葉で語る、ミステリアスな占い師系"))
-    tone = st.select_slider("🗣️ どんな雰囲気で伝えてほしいですか？", options=["癒し 100%", "癒し 50% × 論理 50%", "冷静にロジカル"], value="癒し 50% × 論理 50%")
-    your_name = st.text_input("💬 あなたのLINEでの名前を教えてください", placeholder="例: さくら")
-    partner_name = st.text_input("💬 お相手のLINEでの名前を教えてください", placeholder="例: たくや")
-    counseling_text = st.text_area("💬 今回、お相手との関係で、特にどんなことが気になりますか？", placeholder="例：最近返信が遅い…", height=100)
-    
-    if not your_name or not partner_name:
-        st.info("👆 まずはお二人の名前を教えてくださいね。")
-        return
-    
-    st.write("---")
-    st.header("Step 2: トーク履歴をアップロード")
-    uploaded_file = st.file_uploader("LINEのトーク履歴ファイル（.txt）をここにアップロードしてください。", type="txt")
-    st.info("💡 どんなに長いトーク履歴でも大丈夫。AIが自動で大切な部分だけを読み取って分析します。")
-
-    if uploaded_file is not None:
-        try:
-            talk_data = uploaded_file.getvalue().decode("utf-8")
-            messages, full_text = parse_line_chat(talk_data)
-            if not messages:
-                 st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
-                 return
-            st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
-            
-            with st.spinner("よく使われる言葉を分析中..."):
-                font_path = get_japanese_font()
-                if font_path:
-                    japanese_words = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]{2,}', full_text)
-                    if japanese_words:
-                        word_freq = Counter(japanese_words)
-                        filtered_freq = {word: count for word, count in word_freq.most_common(50) if count >= 2}
-                        if filtered_freq:
-                            wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white").generate_from_frequencies(filtered_freq)
-                            fig_wc, ax_wc = plt.subplots(); ax_wc.imshow(wordcloud, interpolation='bilinear'); ax_wc.axis("off"); st.pyplot(fig_wc); plt.close(fig_wc)
-                else:
-                    st.info("⚠️ この環境ではワードクラウド用の日本語フォントが利用できないため、このステップをスキップします。")
-            
-            st.write("---")
-            
-            if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
-                with st.spinner("星々からのメッセージを読み解いています...✨"):
-                    previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
-                    if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
-                    
-                    color_map_graph = {"1. ...": ("#ffb6c1", ...), "2. ...": ..., "3. ...": ...}
-                    line_color, fill_color = color_map_graph.get(character, ("tab:pink", ...))
-
-                    temp_data, trend = calculate_temperature(messages)
-                    fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
-                    if temp_data.get('labels'):
-                        ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
-                        ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
-                        plt.xticks(rotation=45, ha="right")
-                    ax_graph.set_title('💖 二人の恋の温度グラフ', fontsize=14, pad=20)
-                    plt.tight_layout()
-                    
-                    img_buffer = io.BytesIO()
-                    fig_graph.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
-                    img_buffer.seek(0)
-                    st.pyplot(fig_graph)
-                    plt.close(fig_graph)
-                    
-                    try:
-                        genai.configure(api_key=st.session_state.api_key)
-                        model = genai.GenerativeModel('gemini-pro')
-                        messages_summary = smart_extract_text(messages, max_chars=5000)
-                        final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
-                        
-                        response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 6144, "temperature": 0.75})
-                        ai_response_text = response.text
-                        
-                        st.markdown("---"); st.markdown(ai_response_text)
-                        
-                        pulse_score = extract_pulse_score_from_response(ai_response_text)
-                        summary = extract_summary_from_response(ai_response_text)
-                        save_diagnosis_result(st.session_state.user_id, partner_name, pulse_score, summary)
-                        
-                        pdf_data = create_pdf(ai_response_text, img_buffer, character)
-                        st.download_button("📄 鑑定書をPDFでダウンロード", pdf_data, f"恋の鑑定書.pdf", "application/pdf", use_container_width=True)
-                    except Exception as e:
-                        st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
-                        with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
-        except Exception as e:
-            st.error("💫 ごめんなさい、予期しないエラーが発生しました...")
-            with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
-            
-with st.expander("⚙️ 設定"):
-        if st.button("🔓 ログアウト"):
-            for key in list(st.session_state.keys()): del st.session_state[key]
-            cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
-            st.success("ログアウトしました。")
-            time.sleep(1)
-            st.rerun() 
 
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
@@ -417,30 +290,159 @@ def main():
     st.caption("- 心の羅針盤 Edition -")
     st.write("---")
 
-    # st.session_state の初期化を安全に行う
-    if "authenticated" not in st.session_state:
-        st.session_state.authenticated = False
-    if "api_key" not in st.session_state:
-        st.session_state.api_key = None
+    # -----------------------------------------------------------------
+    # --- ログイン画面のロジック ---
+    if not st.session_state.get("authenticated", False):
+        st.header("ようこそ、鑑定の世界へ")
+        user_id = st.text_input("BOOTHの購入者IDを入力してください", key="login_user_id")
+        
+        if st.button("認証する", key="login_button"):
+            if user_id in VALID_USER_IDS:
+                st.session_state.authenticated = True
+                st.session_state.user_id = user_id
+                cookies["authenticated"] = "True"
+                cookies["user_id"] = user_id
+                cookies.save()
+                st.success("認証しました！画面を切り替えます...")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error("認証に失敗しました。")
 
-    if not st.session_state.authenticated:
-        show_login_screen()
-    elif not st.session_state.api_key:
-        show_api_key_screen()
+    # -----------------------------------------------------------------
+    # --- APIキー設定画面のロジック ---
+    elif not st.session_state.get("api_key", None):
+        st.success("認証に成功しました！")
+        st.header("🔮 AI鑑定師との接続設定")
+        api_key_input = st.text_input("Gemini APIキーをここに貼り付けてください", type="password", key="api_input")
+
+        if st.button("APIキーをテストして保存する", key="api_save_button"):
+            is_valid, message = validate_and_test_api_key(api_key_input)
+            if is_valid:
+                st.session_state.api_key = api_key_input
+                cookies["api_key"] = api_key_input
+                cookies.save()
+                st.success(message)
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.error(message)
+
+    # -----------------------------------------------------------------
+    # --- メインアプリ画面のロジック ---
     else:
-        show_main_app()
+        st.success("✨ AI鑑定師との接続が完了しました！")
+        st.header("Step 1: 鑑定の準備")
+        
+        character = st.selectbox("🔮 どの鑑定師に占ってもらいますか？",("1. 優しく包み込む、お姉さん系", "2. ロジカルに鋭く分析する、専門家系", "3. 星の言葉で語る、ミステリアスな占い師系"))
+        tone = st.select_slider("🗣️ どんな雰囲気で伝えてほしいですか？", options=["癒し 100%", "癒し 50% × 論理 50%", "冷静にロジカル"], value="癒し 50% × 論理 50%")
+        your_name = st.text_input("💬 あなたのLINEでの名前を教えてください", placeholder="例: さくら")
+        partner_name = st.text_input("💬 お相手のLINEでの名前を教えてください", placeholder="例: たくや")
+        counseling_text = st.text_area("💬 今回、お相手との関係で、特にどんなことが気になりますか？", placeholder="例：最近返信が遅い…", height=100)
+        
+        if not your_name or not partner_name:
+            st.info("👆 まずはお二人の名前を教えてくださいね。")
+            return
+        
+        st.write("---")
+        st.header("Step 2: トーク履歴をアップロード")
+        uploaded_file = st.file_uploader("LINEのトーク履歴ファイル（.txt）をここにアップロードしてください。", type="txt")
+        st.info("💡 どんなに長いトーク履歴でも大丈夫。AIが自動で大切な部分だけを読み取って分析します。")
+
+        if uploaded_file is not None:
+            try:
+                talk_data = uploaded_file.getvalue().decode("utf-8")
+                messages, full_text = parse_line_chat(talk_data)
+                if not messages:
+                     st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
+                     return
+                st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
+                
+                with st.spinner("よく使われる言葉を分析中..."):
+                    font_path = get_japanese_font()
+                    if font_path:
+                        japanese_words = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]{2,}', full_text)
+                        if japanese_words:
+                            word_freq = Counter(japanese_words)
+                            filtered_freq = {word: count for word, count in word_freq.most_common(50) if count >= 2}
+                            if filtered_freq:
+                                wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white").generate_from_frequencies(filtered_freq)
+                                fig_wc, ax_wc = plt.subplots(); ax_wc.imshow(wordcloud, interpolation='bilinear'); ax_wc.axis("off"); st.pyplot(fig_wc); plt.close(fig_wc)
+                    else:
+                        st.info("⚠️ この環境ではワードクラウド用の日本語フォントが利用できないため、このステップをスキップします。")
+                
+                st.write("---")
+                
+                if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
+                    with st.spinner("星々からのメッセージを読み解いています...✨"):
+                        previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
+                        if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
+                        
+                        # グラフの色設定を安全に行う
+                        color_map_graph = {
+                            "1. 優しく包み込む、お姉さん系": ("#ffb6c1", "#ffe4e1"),
+                            "2. ロジカルに鋭く分析する、専門家系": ("#87ceeb", "#e0ffff"),
+                            "3. 星の言葉で語る、ミステリアスな占い師系": ("#ba85d3", "#e6e6fa"),
+                        }
+                        line_color, fill_color = color_map_graph.get(character, ("tab:pink", "pink"))
+
+                        temp_data, trend = calculate_temperature(messages)
+                        fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
+                        if temp_data.get('labels'):
+                            ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
+                            ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
+                            plt.xticks(rotation=45, ha="right")
+                        ax_graph.set_title('💖 二人の恋の温度グラフ', fontsize=14, pad=20)
+                        plt.tight_layout()
+                        
+                        img_buffer = io.BytesIO()
+                        fig_graph.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+                        img_buffer.seek(0)
+                        st.pyplot(fig_graph)
+                        plt.close(fig_graph)
+                        
+                        try:
+                            genai.configure(api_key=st.session_state.api_key)
+                            model = genai.GenerativeModel('gemini-pro')
+                            messages_summary = smart_extract_text(messages, max_chars=5000)
+                            final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
+                            
+                            response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 6144, "temperature": 0.75})
+                            ai_response_text = response.text
+                            
+                            st.markdown("---"); st.markdown(ai_response_text)
+                            
+                            pulse_score = extract_pulse_score_from_response(ai_response_text)
+                            summary = extract_summary_from_response(ai_response_text)
+                            save_diagnosis_result(st.session_state.user_id, partner_name, pulse_score, summary)
+                            
+                            pdf_data = create_pdf(ai_response_text, img_buffer, character)
+                            st.download_button("📄 鑑定書をPDFでダウンロード", pdf_data, f"恋の鑑定書_{partner_name}.pdf", "application/pdf", use_container_width=True)
+                        except Exception as e:
+                            st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
+                            with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
+            except Exception as e:
+                st.error("💫 ごめんなさい、予期しないエラーが発生しました...")
+                with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
+                
+        with st.expander("⚙️ 設定"):
+            if st.button("🔓 ログアウト"):
+                # st.session_stateのキーをループで削除する代わりにclear()を使う
+                st.session_state.clear()
+                cookies.delete("authenticated")
+                cookies.delete("api_key")
+                cookies.delete("user_id")
+                cookies.save()
+                st.success("ログアウトしました。")
+                time.sleep(1)
+                st.rerun()
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        # Streamlitのフロントエンドエラー（removeChildなど）はここでは直接キャッチできないことが多いですが、
-        # バックエンドで発生した予期せぬエラーを捕まえるのに役立ちます。
         st.error("😭 予期しないアプリケーションエラーが発生しました。")
         st.info("このエラーは、ページの更新中に発生することがあります。ブラウザのページを再読み込み（リロード）すると解決する場合があります。")
-        
         with st.expander("🔧 開発者向けエラー詳細"):
-            st.error(f"エラーの種類: {type(e).__name__}")
-            st.error(f"エラーメッセージ: {e}")
-            # tracebackライブラリを使って、エラーが発生した場所までの詳細な追跡情報を表示します
             st.code(traceback.format_exc())
+
