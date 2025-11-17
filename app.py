@@ -290,7 +290,9 @@ def show_login_screen():
             cookies["authenticated"] = "True"
             cookies["user_id"] = user_id
             cookies.save()
-            # st.rerun()
+            st.success("認証しました！画面を切り替えます...")
+            time.sleep(1)
+            st.rerun() 
         else: st.error("認証に失敗しました。")
 
 def show_api_key_screen():
@@ -304,9 +306,10 @@ def show_api_key_screen():
             cookies["api_key"] = api_key_input
             cookies.save()
             st.success(message)
-            # time.sleep(1)
-            # st.rerun()
+            time.sleep(1) 
+            st.rerun()    
         else: st.error(message)
+
 
 def show_main_app():
     st.success("✨ AI鑑定師との接続が完了しました！")
@@ -398,11 +401,13 @@ def show_main_app():
             st.error("💫 ごめんなさい、予期しないエラーが発生しました...")
             with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
             
-    with st.expander("⚙️ 設定"):
+with st.expander("⚙️ 設定"):
         if st.button("🔓 ログアウト"):
             for key in list(st.session_state.keys()): del st.session_state[key]
             cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
-            # st.rerun()
+            st.success("ログアウトしました。")
+            time.sleep(1)
+            st.rerun() 
 
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
