@@ -57,13 +57,28 @@ def get_japanese_font():
 
 # +++ 修正後 +++
 def validate_and_test_api_key(api_key):
-    """APIキーの形式のみをチェックし、実際の通信テストは行わないバージョン"""
+    """APIキーが実際に有効かどうかの通信テストを行い、原因に応じたメッセージを返す"""
     if not api_key or not api_key.startswith("AIza") or len(api_key) < 39:
-        # 形式が明らかに違う場合のみエラーを返す
         return False, "APIキーの形式が正しくないようです。（'AIza'で始まり、39文字以上である必要があります）"
     
-    # 形式が合っていれば、通信テストはせずに「成功」とみなす
-    return True, "APIキーの形式は正しいです！保存しました！"
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-pro')
+        # 短いテスト用のリクエストを送信
+        model.generate_content("こんにちは", generation_config={"max_output_tokens": 10})
+        return True, "APIキーは有効です！AI鑑定師との接続に成功しました！"
+    
+    except Exception as e:
+        error_message = str(e).lower()
+        # エラーメッセージに応じて、ユーザーへの案内を変える
+        if "api key not valid" in error_message:
+            return False, "APIキーが正しくありません。もう一度コピーし直してみてください。"
+        elif "billing" in error_message or "enable billing" in error_message:
+            return False, "APIキーは正しいですが、Google Cloudの「請求先アカウント」が有効になっていないようです。"
+        elif "api has not been used" in error_message or "enable the api" in error_message:
+            return False, "APIキーは正しいですが、Google Cloudで「Generative Language API」が有効になっていないようです。"
+        else:
+            return False, f"APIキーが無効、または一時的な接続エラーが発生しました。"
 
 def parse_line_chat(text_data):
     lines = text_data.strip().split('\n')
@@ -327,7 +342,6 @@ def show_main_app():
     st.info("💡 どんなに長いトーク履歴でも大丈夫。AIが自動で大切な部分だけを読み取って分析します。")
 
     if uploaded_file is not None:
-        # ファイルがアップロードされてからの処理全体をtry...exceptで囲む
         try:
             talk_data = uploaded_file.getvalue().decode("utf-8")
             messages, full_text = parse_line_chat(talk_data)
@@ -339,18 +353,16 @@ def show_main_app():
             with st.spinner("よく使われる言葉を分析中..."):
                 try:
                     font_path = get_japanese_font()
-                    if font_path and os.path.exists(font_path):
+                    if font_path and os.path.exists(font_path) and os.path.getsize(font_path) > 0:
                         japanese_words = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]{2,}', full_text)
                         if japanese_words:
                             word_freq = Counter(japanese_words)
                             filtered_freq = {word: count for word, count in word_freq.most_common(50) if count >= 2}
                             if filtered_freq:
-                                wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white").generate_from_frequencies(filtered_freq)
+                                wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white", collocations=False).generate_from_frequencies(filtered_freq)
                                 fig_wc, ax_wc = plt.subplots(); ax_wc.imshow(wordcloud, interpolation='bilinear'); ax_wc.axis("off"); st.pyplot(fig_wc); plt.close(fig_wc)
-                    else:
-                        st.info("ℹ️ ワードクラウド用の日本語フォントが見つからないため、このステップをスキップします。")
-                except Exception as e:
-                    st.warning("⚠️ ワードクラウドの表示で小さな問題が発生しましたが、鑑定は問題なく続けられます。")
+                except Exception:
+                    pass # ワードクラウドのエラーは無視して進む
             
             st.write("---")
             
@@ -372,7 +384,8 @@ def show_main_app():
                         ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
                         ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
                         plt.xticks(rotation=45, ha="right")
-                    ax_graph.set_title('💖 二人の恋の温度グラフ', fontsize=14, pad=20)
+                    # ★修正点：グラフタイトルから絵文字を削除
+                    ax_graph.set_title('二人の恋の温度グラフ', fontsize=14, pad=20)
                     plt.tight_layout()
                     
                     img_buffer = io.BytesIO()
@@ -387,6 +400,7 @@ def show_main_app():
                         messages_summary = smart_extract_text(messages, max_chars=5000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
                         
+                        # ★ご要望通り、安全性フィルターを完全に無効化する設定
                         safety_settings = [
                             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -399,6 +413,13 @@ def show_main_app():
                             generation_config={"max_output_tokens": 6144, "temperature": 0.75},
                             safety_settings=safety_settings
                         )
+                        
+                        # ★追加：AIからの応答がブロックされていないか検証
+                        if not response.parts:
+                            st.error("💫 AIからの応答がブロックされました。これは通常、元となる会話データに不適切な表現が含まれている場合に発生します。")
+                            st.info("お手数ですが、別の会話データでお試しいただくか、開発者までお問い合わせください。")
+                            return # 処理を中断
+
                         ai_response_text = response.text
                         
                         st.markdown("---"); st.markdown(ai_response_text)
@@ -413,9 +434,9 @@ def show_main_app():
                     except Exception as e:
                         st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
                         with st.expander("🔧 詳細"):
-                            st.code(f"{e}\n\n{traceback.format_exc()}")
+                            st.code(f"{traceback.format_exc()}")
         
-        # SyntaxErrorの原因だった、消えていたexceptブロックをここに追加
+        # ★修正点：消えていた外側のexceptブロックを復活
         except Exception as e:
             st.error("💫 ごめんなさい、ファイルの読み込み中に予期しないエラーが発生しました。")
             with st.expander("🔧 詳細"):
@@ -426,7 +447,6 @@ def show_main_app():
             for key in list(st.session_state.keys()): del st.session_state[key]
             cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
             st.rerun()
-
 
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
