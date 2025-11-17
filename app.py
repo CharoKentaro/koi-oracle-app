@@ -175,11 +175,12 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
 - 前回の鑑定日: {previous_data.get('date', '不明')}
 - 前回の脈あり度: {previous_data.get('pulse_score', 0)}%
 - 前回の鑑定サマリー: {previous_data.get('summary', 'なし')}
-- **最重要・特別指示**:
+**【最重要】過去データに関する指示**:
 - あなたはユーザーの{your_name}さんを覚えています。導入文で「{your_name}さん、こんにちは。前回の鑑定から少し時間が経ちましたね」のように、再会を喜ぶ自然な語り口で始めてください。
-- **前回の「脈あり度」は {previous_data.get('pulse_score', 0)}% でした。レポート内で過去と比較する際は、必ずこの数値を正確に使用してください。**
-- **絶対に、0%など、提供されたデータ以外の数値を創作してはいけません。** 事実に基づいて、関係性の変化を具体的に記述してください。（例：「前回の{previous_data.get('pulse_score', 0)}%から、今回は〇〇%へと変化が見られますね」）"""
-    prompt += f"""
+- **前回の脈あり度は「{prev_score}%」でした。この数値を絶対に創作せず、そのまま使用してください。**
+"""
+        # AIに「脈あり度スコア化」の項目で使わせるための、特別な指示を作成
+        comparison_instruction = f"""   **【前回との比較】**: 前回の鑑定では脈あり度が **{prev_score}%** でした。今回の結果と比較し、「前回の{prev_score}%から、今回は〇〇%へと変化しました」のように、数値を正確に使って必ず言及してください。"""    prompt += f"""
 # 基本データ分析
 - 会話の温度グラフの傾向: {trend}
 - 分析対象の会話抜粋:\n{messages_summary}
@@ -229,8 +230,27 @@ def load_previous_diagnosis(user_id, partner_name):
     return None
 
 def extract_pulse_score_from_response(ai_response):
-    match = re.search(r'総合脈あり度[】:\s]*(\d+)\s*%', ai_response)
-    if match: return int(match.group(1))
+    """AIレスポンスから脈あり度を抽出（ちゃろさん考案の改良版）"""
+    # AIが使いそうな多様な表現パターンをリスト化
+    patterns = [
+        r'総合脈あり度[】:\s]*(\d{1,3})\s*[%％]',
+        r'【総合脈あり度】\s*(\d{1,3})\s*[%％]',
+        r'脈あり度[】:\s]*(\d{1,3})\s*[%％]',
+        r'総合的な脈あり度は?\s*(\d{1,3})\s*[%％]',
+        r'(\d{1,3})\s*[%％]\s*の脈あり',
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, ai_response)
+        if match:
+            # マッチした数値を取得
+            score = int(match.group(1))
+            # 0から100の範囲内か確認
+            if 0 <= score <= 100:
+                return score
+    
+    # どのパターンにもマッチしなかった場合、ユーザーに警告を表示
+    st.warning("⚠️ AIの応答から脈あり度のパーセンテージを自動で読み取れませんでした。")
     return 0
 
 def extract_summary_from_response(ai_response):
@@ -412,10 +432,22 @@ def show_main_app():
                             return
                         ai_response_text = response.text
                         st.markdown("---"); st.markdown(ai_response_text)
+                        
+                        # --- ここから修正 ---
                         pulse_score = extract_pulse_score_from_response(ai_response_text)
+                        
+                        # ★ デバッグ情報として、抽出された脈あり度を画面に表示
+                        st.info(f"🔍 抽出された脈あり度: {pulse_score}% (この数値が保存されます)")
+                        
                         summary = extract_summary_from_response(ai_response_text)
                         save_diagnosis_result(st.session_state.user_id, partner_name, pulse_score, summary)
+                        
+                        # ★ PDFダウンロードボタンの前にデバッグ情報を表示
+                        if previous_data:
+                            st.info(f"📊 比較: 前回の脈あり度 {previous_data.get('pulse_score', 0)}% → 今回抽出された脈あり度 {pulse_score}%")
+                        
                         pdf_data = create_pdf(ai_response_text, img_buffer, character)
+
                         st.download_button("📄 鑑定書をPDFでダウンロード", pdf_data, f"恋の鑑定書.pdf", "application/pdf", use_container_width=True)
                     except Exception as e:
                         st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
