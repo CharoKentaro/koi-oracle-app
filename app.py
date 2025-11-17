@@ -1,5 +1,8 @@
 
 
+
+
+
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -75,6 +78,7 @@ def validate_and_test_api_key(api_key):
             model = genai.GenerativeModel(model_name)
             model.generate_content("こんにちは", generation_config={"max_output_tokens": 10})
             st.session_state.selected_model = model_name
+            cookies["selected_model"] = model_name # Cookieにもモデル名を保存
             return True, f"APIキーは有効です！AI鑑定師との接続に成功しました！（モデル: {model_name}）"
         except Exception as e:
             last_error = e
@@ -163,6 +167,7 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
     prompt = f"""あなたは【{character_map.get(character, character)}】です。
 ユーザーは【{tone}】のスタイルでの鑑定を望んでいます。{tone_instruction.get(tone, '')}
 このトーンと言葉遣いを、出力の最後まで徹底して維持してください。
+**重要: あなたは鑑定の最初から最後まで、キャラクターの口調・語尾・ニュアンスを完全に一定に保ち、文体が途中で絶対に変化しないよう、強く意識してください。**
 以下のデータを基に、単なる占いではない、心理分析に基づいた詳細な「恋の心理レポート」を作成してください。
 
 # ユーザー情報
@@ -251,35 +256,101 @@ def load_previous_diagnosis(user_id, partner_name):
     return None
 
 def extract_pulse_score_from_response(ai_response):
-    """AIレスポンスから脈あり度を抽出（ちゃろさん考案の改良版）"""
-    # AIが使いそうな多様な表現パターンをリスト化
+    """
+    AIレスポンスから脈あり度を抽出する、さらに堅牢になった「最強の抽出器」。
+    改行や多様な表現に、より強力に対応します。
+    """
+    # 抽出パターンを、最も信頼性が高い（限定的）なものから順に並べています
     patterns = [
-        r'総合脈あり度[】:\s]*(\d{1,3})\s*[%％]',
-        r'【総合脈あり度】\s*(\d{1,3})\s*[%％]',
-        r'脈あり度[】:\s]*(\d{1,3})\s*[%％]',
-        r'総合的な脈あり度は?\s*(\d{1,3})\s*[%％]',
-        r'(\d{1,3})\s*[%％]\s*の脈あり',
+        # パターン1: 「【総合脈あり度】: 80%」や「【総合脈あり度】\n80%」のような最も典型的な形式
+        r'【総合脈あり度】\s*[:：]?\s*(\d{1,3})\s*[%％]',
+        
+        # パターン2: カッコがない「総合脈あり度: 80%」の形式
+        r'総合脈あり度\s*[:：]?\s*(\d{1,3})\s*[%％]',
+        
+        # パターン3: 「脈あり度は80%」のような、より文章的な形式
+        r'脈あり度は?\s*(\d{1,3})\s*[%％]',
+        
+        # パターン4: 「80%くらいの脈あり」のように、数字が先に来る形式
+        r'(\d{1,3})\s*[%％](?:くらい|ほど|の)脈あり',
     ]
-    
+
     for pattern in patterns:
-        match = re.search(pattern, ai_response)
+        # ★★★★★ ここが重要 ★★★★★
+        # re.DOTALL フラグを使い、「.」が改行文字にもマッチするようにします。
+        # これにより、AIが予期せぬ改行を入れてもパターンが途切れにくくなります。
+        match = re.search(pattern, ai_response, flags=re.DOTALL)
         if match:
-            # マッチした数値を取得
-            score = int(match.group(1))
-            # 0から100の範囲内か確認
-            if 0 <= score <= 100:
-                return score
+            try:
+                # マッチした部分から数値（グループ1）を取得します
+                score = int(match.group(1))
+                
+                # 0から100の範囲内かという最終チェック。ありえない数値を弾きます。
+                if 0 <= score <= 100:
+                    # 正常な値が見つかった瞬間に、その値を返して処理を終了します
+                    return score
+            except (ValueError, IndexError):
+                # 万が一、数値への変換に失敗した場合は、次のパターンに進みます
+                continue
     
-    # どのパターンにもマッチしなかった場合、ユーザーに警告を表示
+    # 全てのパターンを試しても有効な数値が見つからなかった場合
     st.warning("⚠️ AIの応答から脈あり度のパーセンテージを自動で読み取れませんでした。")
     return 0
 
+
 def extract_summary_from_response(ai_response):
-    lines, summary = ai_response.split('\n'), ""
-    for line in lines:
-        if line.strip() and not line.startswith('#'): summary += line.strip() + " ";
-        if len(summary) > 200: break
-    return summary[:200] + '...'
+    """
+    AI自身に鑑定結果を要約させることで、高品質なサマリーを生成します。
+    """
+    # ★★★★★ ここが改善点 ★★★★★
+    # 以前は単純に冒頭を切り取るだけでしたが、AIに要約を依頼する処理に変わりました。
+    try:
+        # AIへの接続情報を再設定
+        genai.configure(api_key=st.session_state.api_key)
+        
+        # メインの鑑定で使われたモデルと同じモデルを使用
+        # Cookieから読み込むことで、ユーザーが選択した最新・最高のモデルを一貫して利用します
+        model_name_to_use = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
+        model = genai.GenerativeModel(model_name_to_use)
+
+        # AIに要約を依頼するための、専用の短いプロンプトを作成
+        summary_prompt = f"""以下の鑑定レポートを、次回の鑑定で過去のデータとして参照するために、100文字以内で最も重要なポイントを要約してください。
+
+---
+{ai_response}
+---
+
+要約:"""
+
+        # AIに要約を生成させる
+        summary_response = model.generate_content(
+            summary_prompt,
+            generation_config={"max_output_tokens": 200}, # 念のため200文字まで許可
+            safety_settings=[{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
+        )
+        
+        # AIが生成した要約テキストを取得
+        summary_text = ""
+        try:
+            summary_text = summary_response.text.strip()
+        except Exception:
+             if hasattr(summary_response, "parts") and summary_response.parts:
+                summary_text = summary_response.parts[0].text.strip()
+        
+        if not summary_text: # 要約が空だった場合の保険
+            raise ValueError("AI summary was empty.")
+            
+        # 万が一要約が長すぎた場合に備えて、最後の保険で切り詰める
+        return summary_text[:200] + '...' if len(summary_text) > 200 else summary_text
+
+    except Exception as e:
+        # もしAIによる要約生成に失敗した場合は、以前の方式で冒頭を切り取る（保険の処理）
+        st.warning(f"AIによる高品質サマリーの生成に失敗しました。以前の方法で保存します。(エラー: {e})")
+        lines, summary = ai_response.split('\n'), ""
+        for line in lines:
+            if line.strip() and not line.startswith('#'): summary += line.strip() + " ";
+            if len(summary) > 200: break
+        return summary[:200] + '...'
 
 class MyPDF(FPDF, HTMLMixin):
     def footer(self):
@@ -331,9 +402,25 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.set_text_color(0, 0, 0)
     pdf.set_font(font_name, '', 11)
     
-    html_text = ai_response_text.replace('\n', '<br>')
+    # 1. 見出し（###）を、大きく目立つ「h2」タグに変換する
+    #    タイトルの後に改行があってもなくても対応できるように改善
+    html_text = re.sub(r'###\s*(.*?)\s*(\n|<br>|$)', r'<h2>\1</h2>', ai_response_text)
+    
+    # 2. 太字（**太字**）を「b」タグに変換する
     html_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', html_text)
-    html_text = re.sub(r'###\s*(.*?)(<br>|$)', r'<h3>\1</h3>', html_text)
+
+    # 3. 通常の改行を、段落を意味する「p」タグに変換し、適度な間隔を空ける
+    #    連続した改行を一つの段落区切りにまとめる
+    paragraphs = [f"<p>{p.strip()}</p>" for p in html_text.split('\n') if p.strip()]
+    html_text = "".join(paragraphs)
+
+    # h2タグ（見出し）の後には、さらにスペースを追加して、より見やすくする
+    html_text = html_text.replace("</h2><p>", "</h2><p><br></p><p>")
+    
+    # PDFに書き出す際のスタイルを設定
+    pdf.set_h1_font_size(18)
+    pdf.set_h2_font_size(16) # h2タグの文字サイズを16に設定
+    
     pdf.write_html(html_text)
     
     # ===== 4. グラフページの作成 =====
@@ -435,23 +522,34 @@ def show_main_app():
                     try:
                         genai.configure(api_key=st.session_state.api_key)
                         
-                        if "selected_model" in st.session_state:
-                            model_name_to_use = st.session_state.selected_model
-                        else:
-                            # テストをスキップした場合、リストの先頭をデフォルトとして使う
-                            model_name_to_use = "models/gemini-2.5-flash"
+                        model_name_to_use = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
                         
                         st.info(f"（デバッグ情報：モデル '{model_name_to_use}' を使用して鑑定します）")
+                                                
                         model = genai.GenerativeModel(model_name_to_use)
                         messages_summary = smart_extract_text(messages, max_chars=8000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
                         safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
                         response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 8192, "temperature": 0.75}, safety_settings=safety_settings)
-                        if not response.parts:
+
+
+                        
+                        # --- ここからが修正箇所 ---
+                        ai_response_text = ""
+                        try:
+                            # ★ 新しいv2.0以降のAIモデルでは、こちらの方法で本文を取得します
+                            ai_response_text = response.text
+                        except Exception:
+                            # ★ 古い形式のAIモデルだった場合の、保険の処理です
+                            if hasattr(response, "parts") and response.parts:
+                                ai_response_text = response.parts[0].text
+                        
+                        # 本文が空だった場合の最終チェック
+                        if not ai_response_text:
                             st.error("💫 AIからの応答がブロックされたか、内容が空でした。")
                             if hasattr(response, 'prompt_feedback'): st.write("🔍 **AIからのフィードバック:**"); st.code(f"{response.prompt_feedback}")
                             return
-                        ai_response_text = response.text
+                        
                         st.markdown("---"); st.markdown(ai_response_text)
                         
                         # --- ここから修正 ---
