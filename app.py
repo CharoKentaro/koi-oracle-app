@@ -190,7 +190,8 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
 - **前回の脈あり度は「{prev_score}%」でした。この数値を絶対に創作せず、そのまま使用してください。**
 """
         comparison_instruction = f"""   **【前回との比較】**: 前回の鑑定では脈あり度が **{prev_score}%** でした。今回の結果と比較し、「前回の{prev_score}%から、今回は〇〇%へと変化しました」のように、数値を正確に使って必ず言及してください。"""
-    
+
+
     prompt += f"""
 # 基本データ分析
 - 会話の温度グラフの傾向: {trend}
@@ -359,13 +360,11 @@ def extract_summary_from_response(ai_response):
         return summary_text
 
     except Exception as e:
-        # ★★★★★ ここが今回の修正の心臓部 ★★★★★
         # AI要約に失敗した場合、ユーザー向けの警告メッセージに加えて、
-        # 開発者向けの「詳細ログ」を表示する機能をここに復活させました。
+        # 開発者向けの「詳細ログ」を表示する機能をここに実装
         st.warning(f"AIによる高品質サマリーの生成に失敗しました。以前の方法で保存します。(エラー: {e})")
         with st.expander("🔧 AI要約エラーの詳細ログ", expanded=True):
             st.code(f"{traceback.format_exc()}")
-        # ★★★★★ 修正ここまで ★★★★★
         
         # フォールバック（保険）処理
         lines = ai_response.split('\n')
@@ -389,43 +388,20 @@ def extract_summary_from_response(ai_response):
             return ai_response[:150] + '...'
             
         return summary[:200] + '...' if len(summary) > 200 else summary
-        
-        return summary_text
 
-    except Exception as e:
-        # AI要約に失敗した場合の、改善されたフォールバック（保険）処理
-        st.warning(f"AIによる高品質サマリーの生成に失敗しました。以前の方法で保存します。(エラー: {e})")
-        
-        lines = ai_response.split('\n')
-        summary_parts = []
-        
-        # 脈あり度に関する行を最優先で探す
-        for line in lines:
-            if '脈あり度' in line or '総合' in line:
-                summary_parts.append(line.strip())
-                break # 見つかったらループを抜ける
-        
-        # 鑑定結果の本文から意味のある行を追加していく
-        for line in lines:
-            clean_line = line.strip()
-            if clean_line and not clean_line.startswith('#') and len(clean_line) > 15:
-                summary_parts.append(clean_line)
-                if len(" ".join(summary_parts)) > 150:
-                    break # ある程度の長さになったら終了
-        
-        summary = " ".join(summary_parts)
-        
-        # それでも要約が作れなかった場合の最終保険
-        if not summary:
-            return ai_response[:150] + '...'
-            
-        return summary[:200] + '...' if len(summary) > 200 else summary
-class MyPDF(FPDF, HTMLMixin):
+from fpdf import FPDF  # HTMLMixinは削除
+class MyPDF(FPDF):  # HTMLMixinを継承しない
     def footer(self):
-        # ページ下部に自動で描画する処理を一旦なくす
         pass
 
+
 def create_pdf(ai_response_text, graph_img_buffer, character):
+
+    # ★ 絵文字を削除する処理を追加
+    # 絵文字の範囲（U+1F300〜U+1F9FF）を削除
+    ai_response_text = re.sub(r'[\U0001F300-\U0001F9FF]+', '', ai_response_text)
+    # その他の記号類も削除
+    ai_response_text = re.sub(r'[\u2600-\u26FF\u2700-\u27BF\uFE0F]+', '', ai_response_text)
 
 
     # ===== 1. PDFの初期設定と、汎用的な余白設定 =====
@@ -508,7 +484,7 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.set_font(font_name, '', 8)
     pdf.set_text_color(128, 128, 128)
     pdf.cell(0, 10, "本鑑定はAIによる心理分析です。", new_x="LMARGIN", new_y="NEXT", align='C')
-    pdf.cell(0, 5, "あなたの恋を心から応援しています 💖", align='C')
+    pdf.cell(0, 5, "あなたの恋を心から応援しています♡", align='C')
 
     return bytes(pdf.output())
 
