@@ -81,29 +81,60 @@ def validate_and_test_api_key(api_key):
             return False, f"APIキーが無効、または一時的な接続エラーが発生しました。"
 
 def parse_line_chat(text_data):
+    """
+    より多くのLINEトーク履歴形式に対応できるよう改善されたパーサー。
+    - 日付行の存在を前提としない。
+    - タブ区切りを基本とし、様々なタイムスタンプ形式に対応。
+    """
     lines = text_data.strip().split('\n')
-    messages, full_text = [], []
-    date_pattern = re.compile(r'^\d{4}/\d{2}/\d{2}\(.+?\)')
-    current_date = ""
-    patterns = [re.compile(r'^(\d{1,2}:\d{2})\t(.+?)\t(.+)'), re.compile(r'^午[前後](\d{1,2}:\d{2})\t(.+?)\t(.+)')]
+    messages = []
+    full_text = []
+    
+    # 典型的なメッセージ行のパターン（例: "12:34\tさくら\tこんにちは"）
+    message_pattern = re.compile(r'^\d{1,2}:\d{2}\t(.+?)\t(.+)')
+
     for line in lines:
-        if date_pattern.match(line):
-            current_date = line.split('\t')[0]
+        line = line.strip()
+        if not line:
             continue
-        matched = False
-        for pattern in patterns:
-            match = pattern.match(line)
-            if match:
-                groups = match.groups()
-                sender, message = groups[-2], groups[-1]
+
+        match = message_pattern.match(line)
+        if match:
+            try:
+                # 新しいメッセージ行が見つかった場合
+                timestamp, sender, message = match.groups()
+                sender = sender.strip()
+                message = message.strip()
+
                 if message not in ["[写真]", "[動画]", "[スタンプ]", "[ファイル]"]:
-                    messages.append({'timestamp': f"{current_date} {groups[0]}", 'sender': sender.strip(), 'message': message.strip()})
-                    full_text.append(message.strip())
-                matched = True
-                break
-        if not matched and messages and line.strip():
-            messages[-1]['message'] += '\n' + line.strip()
-            full_text[-1] += ' ' + line.strip()
+                    # 日付は前のメッセージから引き継ぐか、不明な場合は仮の日付を入れる
+                    date_str = messages[-1]['date'] if messages else "不明な日付"
+                    messages.append({'timestamp': f"{date_str} {timestamp}", 'date': date_str, 'sender': sender, 'message': message})
+                    full_text.append(message)
+            except Exception:
+                continue # この行の解析に失敗しても、次の行へ進む
+        
+        # 日付行のパターン（例: "2025/11/18(火)"）
+        elif re.match(r'^\d{4}/\d{2}/\d{2}\(.\)', line):
+            if messages:
+                # 最後のメッセージに日付情報を更新する
+                messages[-1]['date'] = line.split('\t')[0]
+                messages[-1]['timestamp'] = f"{messages[-1]['date']} {messages[-1]['timestamp'].split(' ')[-1]}"
+
+        # どのパターンにも一致しないが、前の行がメッセージだった場合（改行されたメッセージ）
+        elif messages and full_text:
+            messages[-1]['message'] += '\n' + line
+            full_text[-1] += ' ' + line
+
+    # 最初のメッセージに日付が設定されていない場合、後の日付から推測して設定
+    last_known_date = "不明な日付"
+    for msg in messages:
+        if msg['date'] != "不明な日付":
+            last_known_date = msg['date']
+        elif last_known_date != "不明な日付":
+            msg['date'] = last_known_date
+            msg['timestamp'] = f"{last_known_date} {msg['timestamp'].split(' ')[-1]}"
+            
     return messages, " ".join(full_text)
 
 def smart_extract_text(messages, max_chars=5000):
@@ -120,20 +151,35 @@ def calculate_temperature(messages):
     daily_scores = Counter()
     for msg in messages:
         try:
-            date_str = msg['timestamp'].split(' ')[0]
-            date_obj = datetime.strptime(date_str, '%Y/%m/%d(%a)')
-            score = len(msg['message']) + msg['message'].count('!') * 2 + msg['message'].count('？') * 2
+            timestamp = msg.get('timestamp', '')
+            date_str = timestamp.split(' ')[0]
+            
+            # 曜日の括弧と中身を正規表現で削除 (例: "2025/11/18(火)" -> "2025/11/18")
+            date_str_clean = re.sub(r'\([^)]*\)', '', date_str)
+            
+            # 日付文字列をdatetimeオブジェクトに変換
+            date_obj = datetime.strptime(date_str_clean, '%Y/%m/%d')
+            
+            # スコアを計算
+            message_text = msg.get('message', '')
+            score = len(message_text) + message_text.count('!') * 2 + message_text.count('？') * 2
             daily_scores[date_obj.strftime('%m/%d')] += score
-        except: continue
+        except:
+            continue # 解析できない行はスキップ
+            
     if not daily_scores: return {}, "データ不足"
+    
     sorted_scores = sorted(daily_scores.items())
-    labels, values = [item[0] for item in sorted_scores], [item[1] for item in sorted_scores]
+    labels = [item[0] for item in sorted_scores]
+    values = [item[1] for item in sorted_scores]
+    
     trend = "安定"
     if len(values) >= 4:
         last_avg = sum(values[-3:]) / 3
         prev_avg = sum(values[:-3]) / len(values[:-3]) if len(values[:-3]) > 0 else 0
         if prev_avg > 0 and last_avg > prev_avg * 1.2: trend = "上昇傾向"
         elif prev_avg > 0 and last_avg < prev_avg * 0.8: trend = "下降傾向"
+            
     return {'labels': labels, 'values': values}, trend
 
 def build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data=None):
@@ -378,18 +424,7 @@ def show_main_app():
                     }
                     line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
 
-                    # --- ここからグラフのデバッグ ---
-                    st.write("---")
-                    st.write("### 🔍 グラフ生成デバッグ情報")
-                    st.write("温度計算を開始します...")
                     temp_data, trend = calculate_temperature(messages)
-                    st.write(f"- `temp_data`: `{temp_data}`")
-                    st.write(f"- `trend`: `{trend}`")
-                    st.write(f"- `labels`の数: `{len(temp_data.get('labels', []))}`")
-                    st.write(f"- `values`の数: `{len(temp_data.get('values', []))}`")
-                    st.write("---")
-                    # --- ここまでグラフのデバッグ ---
-                    
                     fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
                     if temp_data.get('labels'):
                         ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
@@ -406,21 +441,11 @@ def show_main_app():
                     plt.close(fig_graph)
                     
                     try:
-                        # --- ここからAI通信のデバッグ ---
-                        st.write("---")
-                        st.write("### 🔍 AI通信デバッグ情報")
-                        st.write("APIキーの設定を開始...")
                         genai.configure(api_key=st.session_state.api_key)
-                        st.write(f"- APIキーの先頭: `{st.session_state.api_key[:8]}...`")
-                        
-                        st.write("モデルを初期化...")
-                        model = genai.GenerativeModel('gemini-pro')
-                        
-                        st.write("プロンプトを作成...")
+                        # ★★★ モデル名を 'gemini-1.0-pro' に修正 ★★★
+                        model = genai.GenerativeModel('gemini-1.0-pro')
                         messages_summary = smart_extract_text(messages, max_chars=5000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
-                        st.write(f"- メッセージサマリーの長さ: `{len(messages_summary)}` 文字")
-                        st.write(f"- 最終プロンプトの長さ: `{len(final_prompt)}` 文字")
                         
                         safety_settings = [
                             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -428,20 +453,15 @@ def show_main_app():
                             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
                         ]
-                        
-                        st.write("AIとの通信を開始します...")
+
                         response = model.generate_content(
                             final_prompt,
                             generation_config={"max_output_tokens": 6144, "temperature": 0.75},
                             safety_settings=safety_settings
                         )
-                        st.write("✅ AIからの応答を受信しました！")
-                        st.write("---")
-                        # --- ここまでAI通信のデバッグ ---
-
+                        
                         if not response.parts:
                             st.error("💫 AIからの応答がブロックされたか、内容が空でした。")
-                            st.info("これは通常、元となる会話データに不適切な表現が含まれているか、API側の問題で発生します。")
                             if hasattr(response, 'prompt_feedback'):
                                 st.write("🔍 **AIからのフィードバック:**")
                                 st.code(f"{response.prompt_feedback}")
@@ -473,6 +493,7 @@ def show_main_app():
             for key in list(st.session_state.keys()): del st.session_state[key]
             cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
             st.rerun()
+
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
 st.title("🌙 恋のオラクル AI星譚")
