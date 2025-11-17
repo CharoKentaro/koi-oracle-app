@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -336,17 +338,30 @@ def show_main_app():
             st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
             
             with st.spinner("よく使われる言葉を分析中..."):
-                font_path = get_japanese_font()
-                if font_path:
-                    japanese_words = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]{2,}', full_text)
-                    if japanese_words:
-                        word_freq = Counter(japanese_words)
-                        filtered_freq = {word: count for word, count in word_freq.most_common(50) if count >= 2}
-                        if filtered_freq:
-                            wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white").generate_from_frequencies(filtered_freq)
-                            fig_wc, ax_wc = plt.subplots(); ax_wc.imshow(wordcloud, interpolation='bilinear'); ax_wc.axis("off"); st.pyplot(fig_wc); plt.close(fig_wc)
-                else:
-                    st.info("⚠️ この環境ではワードクラウド用の日本語フォントが利用できないため、このステップをスキップします。")
+                try:
+                    # 日本語フォントを探しに行く
+                    font_path = get_japanese_font()
+                    
+                    # フォントが見つかればワードクラウドを試みる
+                    if font_path and os.path.exists(font_path):
+                        japanese_words = re.findall(r'[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF]{2,}', full_text)
+                        if japanese_words:
+                            word_freq = Counter(japanese_words)
+                            filtered_freq = {word: count for word, count in word_freq.most_common(50) if count >= 2}
+                            if filtered_freq:
+                                wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white").generate_from_frequencies(filtered_freq)
+                                fig_wc, ax_wc = plt.subplots()
+                                ax_wc.imshow(wordcloud, interpolation='bilinear')
+                                ax_wc.axis("off")
+                                st.pyplot(fig_wc)
+                                plt.close(fig_wc)
+                    else:
+                        # フォントが見つからなかった場合
+                        st.info("ℹ️ ワードクラウド用の日本語フォントが見つからないため、このステップをスキップします。")
+                
+                except Exception as e:
+                    # 上記の処理中にフォントエラーなどで失敗した場合
+                    st.warning("⚠️ ワードクラウドの表示で小さな問題が発生しましたが、鑑定は問題なく続けられます。")
             
             st.write("---")
             
