@@ -244,82 +244,72 @@ class MyPDF(FPDF, HTMLMixin):
         pass
 
 def create_pdf(ai_response_text, graph_img_buffer, character):
-    pdf = MyPDF()
+    # ===== 1. PDFの初期設定と、汎用的な余白設定 =====
+    pdf = MyPDF(orientation='P', unit='mm', format='A4')
+    pdf.set_auto_page_break(auto=True, margin=25)  # 下部マージンを25mmに設定
+    pdf.set_margins(left=20, top=20, right=20)   # 左右上マージンを20mmに設定
+
     font_path = get_japanese_font()
     pdf.font_path = font_path
     font_available = font_path is not None
-
-    # ===== 1ページ目: 豪華な表紙を作成 =====
-    pdf.add_page()
-    
-    # フォントの準備は最初に行う
     if font_available:
         try:
             pdf.add_font('Japanese', '', font_path)
             pdf.add_font('Japanese', 'B', font_path)
-            pdf.set_font('Japanese', '', 12)
         except Exception as e:
             st.warning(f"PDFへの日本語フォントの追加に失敗: {e}")
             font_available, pdf.font_path = False, None
-            pdf.set_font('Arial', '', 12)
-    else:
-        pdf.set_font('Arial', '', 12)
-    
-    # キャラクターごとのテーマカラーを設定
+
+    # ===== 2. 表紙ページの作成 =====
+    pdf.add_page()
     color_map = {
         "1. 優しく包み込む、お姉さん系": (255, 182, 193),
         "2. ロジカルに鋭く分析する、専門家系": (135, 206, 235),
         "3. 星の言葉で語る、ミステリアスな占い師系": (186, 85, 211)
     }
     theme_color = color_map.get(character, (200, 200, 200))
-    
-    # 背景をテーマカラーで塗りつぶし
     pdf.set_fill_color(*theme_color)
-    pdf.rect(0, 0, 210, 297, 'F')  # A4サイズ (横210mm, 縦297mm) を塗りつぶし
+    pdf.rect(0, 0, 210, 297, 'F')
     
-    # タイトルなどを白色の文字で中央に配置
     pdf.set_text_color(255, 255, 255)
-    pdf.set_y(100)  # ページの上から100mmの位置に移動
-    pdf.set_font_size(24)
+    pdf.set_y(110)
+    
+    font_name = 'Japanese' if font_available else 'Arial'
+    pdf.set_font(font_name, 'B', 26)
     pdf.cell(0, 15, "恋のオラクル AI星譚", new_x="LMARGIN", new_y="NEXT", align='C')
-    pdf.set_font_size(12)
+    pdf.set_font(font_name, '', 14)
     pdf.cell(0, 10, "- 心の羅針盤 Edition -", new_x="LMARGIN", new_y="NEXT", align='C')
-    pdf.ln(30) # 少し間隔を空ける
-    pdf.set_font_size(10)
+    pdf.ln(40)
+    pdf.set_font(font_name, '', 11)
     pdf.cell(0, 10, f"鑑定日: {datetime.now().strftime('%Y年%m月%d日')}", align='C')
 
-    # ===== 2ページ目以降: 鑑定結果の本文 =====
+    # ===== 3. 本文ページの作成 =====
     pdf.add_page()
-    pdf.set_text_color(0, 0, 0)  # 文字色を黒に戻す
-    pdf.set_font_size(11)
+    pdf.set_text_color(0, 0, 0)
+    pdf.set_font(font_name, '', 11)
     
-    # HTML形式で本文を書き出す（自動で改ページされる）
     html_text = ai_response_text.replace('\n', '<br>')
     html_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', html_text)
     html_text = re.sub(r'###\s*(.*?)(<br>|$)', r'<h3>\1</h3>', html_text)
     pdf.write_html(html_text)
     
-    # ===== グラフ専用ページ =====
+    # ===== 4. グラフページの作成 =====
     pdf.add_page()
-    if font_available:
-        pdf.set_font('Japanese', '', 14)
-    else:
-        pdf.set_font('Arial', '', 14)
-    pdf.cell(0, 10, "二人の恋の温度グラフ", new_x="LMARGIN", new_y="NEXT", align='C')
-    pdf.ln(5)
-    graph_img_buffer.seek(0)
-    pdf.image(graph_img_buffer, x=pdf.get_x(), y=pdf.get_y(), w=190)
+    pdf.set_font(font_name, 'B', 15)
+    pdf.cell(0, 12, "二人の恋の温度グラフ", new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.ln(8)
     
-    # ===== 最終ページにフッターを手動で追加 =====
-    pdf.set_y(-25) # ページの下から25mmの位置に移動
-    if font_available:
-        pdf.set_font('Japanese', '', 8)
-    else:
-        pdf.set_font('Arial', '', 8)
+    graph_img_buffer.seek(0)
+    graph_width = 210 - (20 * 2)
+    x_position = 20
+    pdf.image(graph_img_buffer, x=x_position, y=pdf.get_y(), w=graph_width)
+
+    # ===== 5. 最後のページにのみ、フッターを手動で描画 =====
+    pdf.set_y(-25) # ページ下部から25mmの位置へ
+    pdf.set_font(font_name, '', 8)
     pdf.set_text_color(128, 128, 128)
     pdf.cell(0, 10, "本鑑定はAIによる心理分析です。", new_x="LMARGIN", new_y="NEXT", align='C')
     pdf.cell(0, 5, "あなたの恋を心から応援しています 💖", align='C')
-
 
     return bytes(pdf.output())
 
