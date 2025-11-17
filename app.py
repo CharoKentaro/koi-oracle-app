@@ -362,7 +362,7 @@ def show_main_app():
                                 wordcloud = WordCloud(font_path=font_path, width=800, height=400, background_color="white", collocations=False).generate_from_frequencies(filtered_freq)
                                 fig_wc, ax_wc = plt.subplots(); ax_wc.imshow(wordcloud, interpolation='bilinear'); ax_wc.axis("off"); st.pyplot(fig_wc); plt.close(fig_wc)
                 except Exception:
-                    pass # ワードクラウドのエラーは無視して進む
+                    pass
             
             st.write("---")
             
@@ -378,13 +378,24 @@ def show_main_app():
                     }
                     line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
 
+                    # --- ここからグラフのデバッグ ---
+                    st.write("---")
+                    st.write("### 🔍 グラフ生成デバッグ情報")
+                    st.write("温度計算を開始します...")
                     temp_data, trend = calculate_temperature(messages)
+                    st.write(f"- `temp_data`: `{temp_data}`")
+                    st.write(f"- `trend`: `{trend}`")
+                    st.write(f"- `labels`の数: `{len(temp_data.get('labels', []))}`")
+                    st.write(f"- `values`の数: `{len(temp_data.get('values', []))}`")
+                    st.write("---")
+                    # --- ここまでグラフのデバッグ ---
+                    
                     fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
                     if temp_data.get('labels'):
                         ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
                         ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
                         plt.xticks(rotation=45, ha="right")
-                    # ★修正点：グラフタイトルから絵文字を削除
+                    
                     ax_graph.set_title('二人の恋の温度グラフ', fontsize=14, pad=20)
                     plt.tight_layout()
                     
@@ -395,30 +406,46 @@ def show_main_app():
                     plt.close(fig_graph)
                     
                     try:
+                        # --- ここからAI通信のデバッグ ---
+                        st.write("---")
+                        st.write("### 🔍 AI通信デバッグ情報")
+                        st.write("APIキーの設定を開始...")
                         genai.configure(api_key=st.session_state.api_key)
+                        st.write(f"- APIキーの先頭: `{st.session_state.api_key[:8]}...`")
+                        
+                        st.write("モデルを初期化...")
                         model = genai.GenerativeModel('gemini-pro')
+                        
+                        st.write("プロンプトを作成...")
                         messages_summary = smart_extract_text(messages, max_chars=5000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
+                        st.write(f"- メッセージサマリーの長さ: `{len(messages_summary)}` 文字")
+                        st.write(f"- 最終プロンプトの長さ: `{len(final_prompt)}` 文字")
                         
-                        # ★ご要望通り、安全性フィルターを完全に無効化する設定
                         safety_settings = [
                             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
                         ]
-
+                        
+                        st.write("AIとの通信を開始します...")
                         response = model.generate_content(
                             final_prompt,
                             generation_config={"max_output_tokens": 6144, "temperature": 0.75},
                             safety_settings=safety_settings
                         )
-                        
-                        # ★追加：AIからの応答がブロックされていないか検証
+                        st.write("✅ AIからの応答を受信しました！")
+                        st.write("---")
+                        # --- ここまでAI通信のデバッグ ---
+
                         if not response.parts:
-                            st.error("💫 AIからの応答がブロックされました。これは通常、元となる会話データに不適切な表現が含まれている場合に発生します。")
-                            st.info("お手数ですが、別の会話データでお試しいただくか、開発者までお問い合わせください。")
-                            return # 処理を中断
+                            st.error("💫 AIからの応答がブロックされたか、内容が空でした。")
+                            st.info("これは通常、元となる会話データに不適切な表現が含まれているか、API側の問題で発生します。")
+                            if hasattr(response, 'prompt_feedback'):
+                                st.write("🔍 **AIからのフィードバック:**")
+                                st.code(f"{response.prompt_feedback}")
+                            return
 
                         ai_response_text = response.text
                         
@@ -436,7 +463,6 @@ def show_main_app():
                         with st.expander("🔧 詳細"):
                             st.code(f"{traceback.format_exc()}")
         
-        # ★修正点：消えていた外側のexceptブロックを復活
         except Exception as e:
             st.error("💫 ごめんなさい、ファイルの読み込み中に予期しないエラーが発生しました。")
             with st.expander("🔧 詳細"):
@@ -447,7 +473,6 @@ def show_main_app():
             for key in list(st.session_state.keys()): del st.session_state[key]
             cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
             st.rerun()
-
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
 st.title("🌙 恋のオラクル AI星譚")
