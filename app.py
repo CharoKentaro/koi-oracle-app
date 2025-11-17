@@ -292,7 +292,7 @@ def extract_pulse_score_from_response(ai_response):
 def extract_summary_from_response(ai_response):
     """
     AI自身に鑑定結果を要約させることで、高品質なサマリーを生成します（改良版）。
-    エラー処理と堅牢な応答取得を実装しています。
+    エラー処理と、開発者向けの詳細なエラーログ表示機能を実装しています。
     """
     try:
         # AIへの接続情報を再設定
@@ -337,14 +337,14 @@ def extract_summary_from_response(ai_response):
             if hasattr(summary_response, 'text'):
                 summary_text = summary_response.text.strip()
         except Exception:
-            pass # 失敗しても次の方法を試す
+            pass 
         
         if not summary_text:
             try:
                 if hasattr(summary_response, "parts") and summary_response.parts:
                     summary_text = "".join([part.text for part in summary_response.parts if hasattr(part, 'text')]).strip()
             except Exception:
-                pass # これも失敗したら、最終的に空のままになる
+                pass
 
         # 応答が空だった場合のエラー処理
         if not summary_text:
@@ -353,9 +353,42 @@ def extract_summary_from_response(ai_response):
                 st.info(f"🔍 AIからのフィードバック: {summary_response.prompt_feedback}")
             raise ValueError("AI summary was empty - falling back to manual extraction.")
         
-        # 長すぎる場合は切り詰め
         if len(summary_text) > 200:
             summary_text = summary_text[:200] + '...'
+        
+        return summary_text
+
+    except Exception as e:
+        # ★★★★★ ここが今回の修正の心臓部 ★★★★★
+        # AI要約に失敗した場合、ユーザー向けの警告メッセージに加えて、
+        # 開発者向けの「詳細ログ」を表示する機能をここに復活させました。
+        st.warning(f"AIによる高品質サマリーの生成に失敗しました。以前の方法で保存します。(エラー: {e})")
+        with st.expander("🔧 AI要約エラーの詳細ログ", expanded=True):
+            st.code(f"{traceback.format_exc()}")
+        # ★★★★★ 修正ここまで ★★★★★
+        
+        # フォールバック（保険）処理
+        lines = ai_response.split('\n')
+        summary_parts = []
+        
+        for line in lines:
+            if '脈あり度' in line or '総合' in line:
+                summary_parts.append(line.strip())
+                break
+        
+        for line in lines:
+            clean_line = line.strip()
+            if clean_line and not clean_line.startswith('#') and len(clean_line) > 15:
+                summary_parts.append(clean_line)
+                if len(" ".join(summary_parts)) > 150:
+                    break
+        
+        summary = " ".join(summary_parts)
+        
+        if not summary:
+            return ai_response[:150] + '...'
+            
+        return summary[:200] + '...' if len(summary) > 200 else summary
         
         return summary_text
 
