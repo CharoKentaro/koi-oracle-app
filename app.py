@@ -63,7 +63,7 @@ def validate_and_test_api_key(api_key):
     
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         # 短いテスト用のリクエストを送信
         model.generate_content("こんにちは", generation_config={"max_output_tokens": 10})
         return True, "APIキーは有効です！AI鑑定師との接続に成功しました！"
@@ -445,7 +445,7 @@ def show_main_app():
                     
                     try:
                         genai.configure(api_key=st.session_state.api_key)
-                        model = genai.GenerativeModel('gemini-1.0-pro')
+                        model = genai.GenerativeModel('gemini-2.5-flash')
                         messages_summary = smart_extract_text(messages, max_chars=5000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
                         
