@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
 
-# ページの基本設定
+# --- ページの基本設定 ---
 st.set_page_config(
     page_title="恋のオラクル AI星譚",
     page_icon="🌙",
@@ -10,21 +10,24 @@ st.set_page_config(
 )
 
 # --- クッキーマネージャーの準備 ---
-# このキーはあなただけの秘密の文字列にしてください
 cookies = EncryptedCookieManager(
     password="my_super_secret_password_12345",
 )
-# アプリケーションをロードするたびに実行される
 if not cookies.ready():
     st.stop()
 
-
-# --- 状態管理 ---
-# セッション状態に値がなければ初期化
+# --- 状態管理フラグ ---
+# st.session_stateに値がなければ初期化
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = cookies.get("authenticated", False)
 if "api_key" not in st.session_state:
     st.session_state.api_key = cookies.get("api_key", None)
+
+# クッキーに書き込むべきデータを一時的に保持するフラグ
+if "cookie_update_needed" not in st.session_state:
+    st.session_state.cookie_update_needed = False
+if "logout_in_progress" not in st.session_state:
+    st.session_state.logout_in_progress = False
 
 # ---------------------------------------------------------------------
 # 画面描画関数
@@ -39,10 +42,7 @@ def show_login_screen():
         VALID_USER_IDS = ["test_user_01", "charo_special_id", "buyer_id_123"]
         if user_id in VALID_USER_IDS:
             st.session_state.authenticated = True
-            cookies.set("authenticated", True)
-            # st.rerun()の代わりに、少し待ってから再実行するアニメーション的な効果
-            st.success("認証に成功しました。鑑定画面に移動します...")
-            time.sleep(1)
+            st.session_state.cookie_update_needed = True # クッキー更新フラグを立てる
             st.rerun()
         else:
             st.error("認証に失敗しました。正しいIDを入力してください。")
@@ -57,9 +57,7 @@ def show_api_key_screen():
     api_key_possessed = st.radio(
         "Gemini APIキーはお持ちですか？",
         ("持っています", "持っていません / 取得方法がわかりません"),
-        horizontal=True,
-        index=1,
-        key="api_radio"
+        horizontal=True, index=1, key="api_radio"
     )
 
     if api_key_possessed == "持っています":
@@ -67,9 +65,7 @@ def show_api_key_screen():
         if st.button("APIキーを設定・保存する", key="api_save_button"):
             if api_key_input:
                 st.session_state.api_key = api_key_input
-                cookies.set("api_key", api_key_input)
-                st.success("APIキーを保存しました。鑑定を開始します...")
-                time.sleep(1)
+                st.session_state.cookie_update_needed = True # クッキー更新フラグを立てる
                 st.rerun()
             else:
                 st.warning("APIキーを入力してください。")
@@ -92,13 +88,7 @@ def show_main_app():
     st.write("ここに、キャラクター選択やファイルアップロードの機能を作っていきましょう！")
 
     if st.button("設定をリセット（ログアウト）", key="logout_button"):
-        cookies.delete("authenticated")
-        cookies.delete("api_key")
-        # セッション状態もクリア
-        st.session_state.authenticated = False
-        st.session_state.api_key = None
-        st.success("設定をリセットしました。ページを更新するとログイン画面に戻ります。")
-        time.sleep(1)
+        st.session_state.logout_in_progress = True # ログアウトフラグを立てる
         st.rerun()
 
 # ---------------------------------------------------------------------
@@ -117,3 +107,25 @@ elif not st.session_state.api_key:
     show_api_key_screen()
 else:
     show_main_app()
+
+# ---------------------------------------------------------------------
+# ★★★ ここが重要！スクリプトの最後にクッキー操作をまとめる ★★★
+# ---------------------------------------------------------------------
+
+if st.session_state.cookie_update_needed:
+    # 認証情報とAPIキーの両方を、現在のsession_stateの内容で上書き保存
+    cookies.set("authenticated", st.session_state.authenticated)
+    cookies.set("api_key", st.session_state.api_key)
+    st.session_state.cookie_update_needed = False # フラグをリセット
+
+if st.session_state.logout_in_progress:
+    cookies.delete("authenticated")
+    cookies.delete("api_key")
+    # セッション状態もクリア
+    st.session_state.authenticated = False
+    st.session_state.api_key = None
+    st.session_state.logout_in_progress = False # フラグをリセット
+    # ログアウトメッセージは不要なら消してもOK
+    st.info("ログアウトしました。ページを更新してください。")
+    time.sleep(1)
+    st.rerun()
