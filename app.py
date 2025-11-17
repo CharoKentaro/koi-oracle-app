@@ -292,102 +292,32 @@ def extract_pulse_score_from_response(ai_response):
 
 def extract_summary_from_response(ai_response):
     """
-    AI自身に鑑定結果を要約させることで、高品質なサマリーを生成します（改良版）。
-    エラー処理と、開発者向けの詳細なエラーログ表示機能を実装しています。
+    シンプルな手動サマリー生成（AI呼び出しなし）
     """
-    try:
-        # AIへの接続情報を再設定
-        genai.configure(api_key=st.session_state.api_key)
-        
-        # メインの鑑定で使われたモデルと同じモデルを使用
-        model_name_to_use = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
-        model = genai.GenerativeModel(model_name_to_use)
-
-        # AIに要約を依頼するための、より明確なプロンプト
-        summary_prompt = f"""以下の鑑定レポートの内容を、次回の鑑定で過去データとして参照するために、最も重要なポイントだけを **150文字以内** で要約してください。
-
-必ず以下の形式で出力してください：
-- 脈あり度の数値
-- 関係性の状態（例：順調、停滞、進展中など）
-- 重要な特徴（1〜2点）
-
-鑑定レポート:
----
-{ai_response[:2000]}
----
-
-要約（150文字以内）:"""
-
-        # サマリー生成時にもセーフティ設定を緩和
-        safety_settings = [
-            {"category": c, "threshold": "BLOCK_NONE"} 
-            for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", 
-                     "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]
-        ]
-
-        # AIに要約を生成させる（温度を下げて安定化）
-        summary_response = model.generate_content(
-            summary_prompt,
-            generation_config={"max_output_tokens": 300, "temperature": 0.3},
-            safety_settings=safety_settings
-        )
-        
-        # より堅牢な応答取得処理
-        summary_text = ""
-        try:
-            if hasattr(summary_response, 'text'):
-                summary_text = summary_response.text.strip()
-        except Exception:
-            pass 
-        
-        if not summary_text:
-            try:
-                if hasattr(summary_response, "parts") and summary_response.parts:
-                    summary_text = "".join([part.text for part in summary_response.parts if hasattr(part, 'text')]).strip()
-            except Exception:
-                pass
-
-        # 応答が空だった場合のエラー処理
-        if not summary_text:
-            st.warning("⚠️ AIによる要約が空でした。セーフティフィルターまたは一時的なAPIエラーの可能性があります。")
-            if hasattr(summary_response, 'prompt_feedback'):
-                st.info(f"🔍 AIからのフィードバック: {summary_response.prompt_feedback}")
-            raise ValueError("AI summary was empty - falling back to manual extraction.")
-        
-        if len(summary_text) > 200:
-            summary_text = summary_text[:200] + '...'
-        
-        return summary_text
-
-    except Exception as e:
-        # AI要約に失敗した場合、ユーザー向けの警告メッセージに加えて、
-        # 開発者向けの「詳細ログ」を表示する機能をここに実装
-        st.warning(f"AIによる高品質サマリーの生成に失敗しました。以前の方法で保存します。(エラー: {e})")
-        with st.expander("🔧 AI要約エラーの詳細ログ", expanded=True):
-            st.code(f"{traceback.format_exc()}")
-        
-        # フォールバック（保険）処理
-        lines = ai_response.split('\n')
-        summary_parts = []
-        
-        for line in lines:
-            if '脈あり度' in line or '総合' in line:
-                summary_parts.append(line.strip())
+    lines = ai_response.split('\n')
+    summary_parts = []
+    
+    # 脈あり度を探す
+    for line in lines:
+        if '脈あり度' in line or '総合' in line:
+            summary_parts.append(line.strip())
+            break
+    
+    # 重要そうな行を追加
+    for line in lines:
+        clean_line = line.strip()
+        if clean_line and not clean_line.startswith('#') and len(clean_line) > 15:
+            summary_parts.append(clean_line)
+            if len(" ".join(summary_parts)) > 150:
                 break
+    
+    summary = " ".join(summary_parts)
+    
+    if not summary:
+        return ai_response[:150] + '...'
         
-        for line in lines:
-            clean_line = line.strip()
-            if clean_line and not clean_line.startswith('#') and len(clean_line) > 15:
-                summary_parts.append(clean_line)
-                if len(" ".join(summary_parts)) > 150:
-                    break
-        
-        summary = " ".join(summary_parts)
-        
-        if not summary:
-            return ai_response[:150] + '...'
-            
-        return summary[:200] + '...' if len(summary) > 200 else summary
+    return summary[:200] + '...' if len(summary) > 200 else summary
+
 
 from fpdf import FPDF  # HTMLMixinは削除
 class MyPDF(FPDF):  # HTMLMixinを継承しない
