@@ -406,10 +406,36 @@ def show_main_app():
 
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
-st.title("🌙 恋のオラクル AI星譚")
-st.caption("- 心の羅針盤 Edition -")
-st.write("---")
+# ---------------------------------------------------------------------
+def main():
+    st.title("🌙 恋のオラクル AI星譚")
+    st.caption("- 心の羅針盤 Edition -")
+    st.write("---")
 
-if not st.session_state.authenticated: show_login_screen()
-elif not st.session_state.api_key: show_api_key_screen()
-else: show_main_app()
+    # st.session_state の初期化を安全に行う
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if "api_key" not in st.session_state:
+        st.session_state.api_key = None
+
+    if not st.session_state.authenticated:
+        show_login_screen()
+    elif not st.session_state.api_key:
+        show_api_key_screen()
+    else:
+        show_main_app()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        # Streamlitのフロントエンドエラー（removeChildなど）はここでは直接キャッチできないことが多いですが、
+        # バックエンドで発生した予期せぬエラーを捕まえるのに役立ちます。
+        st.error("😭 予期しないアプリケーションエラーが発生しました。")
+        st.info("このエラーは、ページの更新中に発生することがあります。ブラウザのページを再読み込み（リロード）すると解決する場合があります。")
+        
+        with st.expander("🔧 開発者向けエラー詳細"):
+            st.error(f"エラーの種類: {type(e).__name__}")
+            st.error(f"エラーメッセージ: {e}")
+            # tracebackライブラリを使って、エラーが発生した場所までの詳細な追跡情報を表示します
+            st.code(traceback.format_exc())
