@@ -579,6 +579,17 @@ def show_main_app():
                             # ★ 古い形式のAIモデルだった場合の、保険の処理です
                             if hasattr(response, "parts") and response.parts:
                                 ai_response_text = response.parts[0].text
+
+# ★★★★★ ここにデバッグコードを追加 ★★★★★
+                        st.subheader("🟣 デバッグ情報 🟣")
+                        with st.expander("AIからの生の応答とフィードバックを確認", expanded=True):
+                            st.markdown("**AIからの生の応答（ai_response_text）:**")
+                            st.code(ai_response_text if ai_response_text else "（応答テキストは空でした）")
+                            st.markdown("**AIからのフィードバック（response.prompt_feedback）:**")
+                            st.code(response.prompt_feedback if hasattr(response, 'prompt_feedback') else "（フィードバックはありませんでした）")
+                        # ★★★★★ デバッグコードここまで ★★★★★
+
+
                         
                         # 本文が空だった場合の最終チェック
                         if not ai_response_text:
