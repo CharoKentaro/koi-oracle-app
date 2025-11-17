@@ -290,7 +290,7 @@ def show_login_screen():
             cookies["authenticated"] = "True"
             cookies["user_id"] = user_id
             cookies.save()
-            st.rerun()
+            # st.rerun()
         else: st.error("認証に失敗しました。")
 
 def show_api_key_screen():
@@ -304,8 +304,8 @@ def show_api_key_screen():
             cookies["api_key"] = api_key_input
             cookies.save()
             st.success(message)
-            time.sleep(1)
-            st.rerun()
+            # time.sleep(1)
+            # st.rerun()
         else: st.error(message)
 
 def show_main_app():
@@ -402,7 +402,7 @@ def show_main_app():
         if st.button("🔓 ログアウト"):
             for key in list(st.session_state.keys()): del st.session_state[key]
             cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
-            st.rerun()
+            # st.rerun()
 
 # ---------------------------------------------------------------------
 # --- メインの実行ロジック ---
