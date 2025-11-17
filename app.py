@@ -1,3 +1,5 @@
+
+
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -238,12 +240,8 @@ def extract_summary_from_response(ai_response):
 
 class MyPDF(FPDF, HTMLMixin):
     def footer(self):
-        self.set_y(-20)
-        if hasattr(self, 'font_path') and self.font_path: self.set_font('Japanese', '', 8)
-        else: self.set_font('Arial', '', 8)
-        self.set_text_color(128, 128, 128)
-        self.cell(0, 10, "本鑑定はAIによる心理分析です。", new_x="LMARGIN", new_y="NEXT", align='C')
-        self.cell(0, 5, "あなたの恋を心から応援しています 💖", align='C')
+        # ページ下部に自動で描画する処理を一旦なくす
+        pass
 
 def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf = MyPDF()
@@ -287,6 +285,19 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.ln(5)
     graph_img_buffer.seek(0)
     pdf.image(graph_img_buffer, x=pdf.get_x(), y=pdf.get_y(), w=190)
+
+
+    pdf.set_y(-25) # ページの下から25mmの位置に移動
+    if font_available:
+        pdf.set_font('Japanese', '', 8)
+    else:
+        pdf.set_font('Arial', '', 8)
+    pdf.set_text_color(128, 128, 128)
+    pdf.cell(0, 10, "本鑑定はAIによる心理分析です。", new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.cell(0, 5, "あなたの恋を心から応援しています 💖", align='C')
+
+
+
     return bytes(pdf.output())
 
 def show_login_screen():
