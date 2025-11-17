@@ -81,59 +81,51 @@ def validate_and_test_api_key(api_key):
             return False, f"APIキーが無効、または一時的な接続エラーが発生しました。"
 
 def parse_line_chat(text_data):
-    """
-    より多くのLINEトーク履歴形式に対応できるよう改善されたパーサー。
-    - 日付行の存在を前提としない。
-    - タブ区切りを基本とし、様々なタイムスタンプ形式に対応。
-    """
     lines = text_data.strip().split('\n')
     messages = []
     full_text = []
-    
-    # 典型的なメッセージ行のパターン（例: "12:34\tさくら\tこんにちは"）
-    message_pattern = re.compile(r'^\d{1,2}:\d{2}\t(.+?)\t(.+)')
+    current_date = "日付不明"
 
+    # [トーク名] や [保存日] などのヘッダー行を無視する
+    lines = [line for line in lines if not (line.startswith('[') and line.endswith(']'))]
+
+    # メッセージ行のパターンを複数用意 (時刻<タブ>名前<タブ>メッセージ)
+    message_pattern = re.compile(r'^(\d{1,2}:\d{2})\t([^\t]+)\t(.*)')
+    
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        match = message_pattern.match(line)
-        if match:
+        # まず、日付行のパターンに一致するかチェック (例: "2025/11/18(火)")
+        date_match = re.match(r'^\d{4}/\d{2}/\d{2}\(.\)', line)
+        if date_match:
+            current_date = date_match.group(0)
+            continue
+
+        # 次に、メッセージ行のパターンに一致するかチェック
+        message_match = message_pattern.match(line)
+        if message_match:
             try:
-                # 新しいメッセージ行が見つかった場合
-                timestamp, sender, message = match.groups()
+                timestamp, sender, message = message_match.groups()
                 sender = sender.strip()
                 message = message.strip()
 
                 if message not in ["[写真]", "[動画]", "[スタンプ]", "[ファイル]"]:
-                    # 日付は前のメッセージから引き継ぐか、不明な場合は仮の日付を入れる
-                    date_str = messages[-1]['date'] if messages else "不明な日付"
-                    messages.append({'timestamp': f"{date_str} {timestamp}", 'date': date_str, 'sender': sender, 'message': message})
+                    messages.append({
+                        'timestamp': f"{current_date} {timestamp}",
+                        'sender': sender,
+                        'message': message
+                    })
                     full_text.append(message)
             except Exception:
-                continue # この行の解析に失敗しても、次の行へ進む
+                continue
+            continue
         
-        # 日付行のパターン（例: "2025/11/18(火)"）
-        elif re.match(r'^\d{4}/\d{2}/\d{2}\(.\)', line):
-            if messages:
-                # 最後のメッセージに日付情報を更新する
-                messages[-1]['date'] = line.split('\t')[0]
-                messages[-1]['timestamp'] = f"{messages[-1]['date']} {messages[-1]['timestamp'].split(' ')[-1]}"
-
-        # どのパターンにも一致しないが、前の行がメッセージだった場合（改行されたメッセージ）
-        elif messages and full_text:
+        # どのパターンにも一致しない場合、前のメッセージの続き（改行）とみなす
+        if messages:
             messages[-1]['message'] += '\n' + line
             full_text[-1] += ' ' + line
-
-    # 最初のメッセージに日付が設定されていない場合、後の日付から推測して設定
-    last_known_date = "不明な日付"
-    for msg in messages:
-        if msg['date'] != "不明な日付":
-            last_known_date = msg['date']
-        elif last_known_date != "不明な日付":
-            msg['date'] = last_known_date
-            msg['timestamp'] = f"{last_known_date} {msg['timestamp'].split(' ')[-1]}"
             
     return messages, " ".join(full_text)
 
@@ -390,11 +382,22 @@ def show_main_app():
     if uploaded_file is not None:
         try:
             talk_data = uploaded_file.getvalue().decode("utf-8")
+
+            # ★★★ ここから究極のデバッグ機能 ★★★
+            with st.expander("🔍 **【重要】アップロードされたファイルの内容を確認**"):
+                st.info("プログラムが読み取ったファイルの中身（先頭15行）です。この内容を開発者にお知らせください。")
+                lines = talk_data.strip().split('\n')
+                st.code('\n'.join(lines[:15]))
+            # ★★★ ここまで究極のデバッグ機能 ★★★
+
             messages, full_text = parse_line_chat(talk_data)
             if not messages:
-                 st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
+                 st.warning("⚠️ 有効なメッセージが見つかりませんでした。上記のファイル内容を確認してください。")
                  return
             st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
+            
+            # (以下、鑑定処理が続く...)
+            # (この部分は変更ありません)
             
             with st.spinner("よく使われる言葉を分析中..."):
                 try:
@@ -418,7 +421,7 @@ def show_main_app():
                     if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
                     
                     color_map_graph = {
-                        "1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"),
+                        "1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ff6c1"),
                         "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"),
                         "3. 星の言葉で語る、ミステリアスな占い師系": ("#9370db", "#e6e6fa")
                     }
@@ -442,7 +445,6 @@ def show_main_app():
                     
                     try:
                         genai.configure(api_key=st.session_state.api_key)
-                        # ★★★ モデル名を 'gemini-1.0-pro' に修正 ★★★
                         model = genai.GenerativeModel('gemini-1.0-pro')
                         messages_summary = smart_extract_text(messages, max_chars=5000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
