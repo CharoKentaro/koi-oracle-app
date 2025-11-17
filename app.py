@@ -148,10 +148,57 @@ def calculate_temperature(messages):
     return {'labels': labels, 'values': values}, trend
 
 def build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data=None):
-    # この関数は変更ありません（内容は省略）
-    character_map = {"1. 優しく包み込む、お姉さん系": "優しく包み込むお姉さんタイプの鑑定師", "2. ロジカルに鋭く分析する、専門家系": "ロジカルに鋭く分析する専門家タイプの鑑定師", "3. 星の言葉で語る、ミステリアスな占い師系": "星の言葉で語るミステリアスな占い師"}
-    tone_instruction = {"癒し 100%": "とにかく優しく、温かく包み込むような言葉遣いで。否定的な表現は避け、常に希望を見出してください。", "癒し 50% × 論理 50%": "優しさと客観性のバランスを保ちながら、事実も伝えつつ励ましてください。", "冷静にロジカル": "感情に流されず、客観的なデータと論理的な分析を中心に伝えてください。"}
-    prompt = f"""(プロンプト内容は省略)"""
+    character_map = {
+        "1. 優しく包み込む、お姉さん系": "優しく包み込むお姉さんタイプの鑑定師",
+        "2. ロジカルに鋭く分析する、専門家系": "ロジカルに鋭く分析する専門家タイプの鑑定師",
+        "3. 星の言葉で語る、ミステリアスな占い師系": "星の言葉で語るミステリアスな占い師"
+    }
+    tone_instruction = {
+        "癒し 100%": "とにかく優しく、温かく包み込むような言葉遣いで。否定的な表現は避け、常に希望を見出してください。",
+        "癒し 50% × 論理 50%": "優しさと客観性のバランスを保ちながら、事実も伝えつつ励ましてください。",
+        "冷静にロジカル": "感情に流されず、客観的なデータと論理的な分析を中心に伝えてください。"
+    }
+    prompt = f"""あなたは【{character_map.get(character, character)}】です。
+ユーザーは【{tone}】のスタイルでの鑑定を望んでいます。{tone_instruction.get(tone, '')}
+このトーンと言葉遣いを、出力の最後まで徹底して維持してください。
+以下のデータを基に、単なる占いではない、心理分析に基づいた詳細な「恋の心理レポート」を作成してください。
+# ユーザー情報
+- ユーザー名: {your_name}
+- 相手の名前: {partner_name}
+- ユーザーの悩み: {counseling_text}
+"""
+    if previous_data:
+        prompt += f"""
+# 過去の鑑定データ
+- 前回の鑑定日: {previous_data.get('date', '不明')}
+- 前回の脈あり度: {previous_data.get('pulse_score', 0)}%
+- 前回の鑑定サマリー: {previous_data.get('summary', 'なし')}
+- **特別指示**: あなたはユーザーの{your_name}さんを覚えています。導入文で「{your_name}さん、こんにちは。前回の鑑定から少し時間が経ちましたね」のように、再会を喜ぶ自然な語り口で始めてください。また、今回の分析結果と過去のデータを比較し、「前回よりも〇〇な点が増えていますね」といった、関係性の変化についての言及をレポート内に含めてください。
+"""
+    prompt += f"""
+# 基本データ分析
+- 会話の温度グラフの傾向: {trend}
+- 分析対象の会話抜粋:\n{messages_summary}
+# AIによる深層分析依頼
+1. **感情の波の分析**: トーク履歴全体を通して、「ポジティブ」「ネガティブ」な感情表現は、それぞれどのような傾向で推移していますか？
+2. **脈ありシグナルのスコア化**: 以下の項目を0〜10点で評価し、総合的な「脈あり度」をパーセンテージで算出してください。
+   - 質問返しの積極性, ポジティブな絵文字・表現の使用頻度, 返信間隔の安定性・速さ, 相手からの賞賛・共感の言葉, 会話を広げようとする意図
+   - 【総合脈あり度】: 〇〇%
+   - なぜそのスコアになったのか、根拠を優しく解説してください。
+3. **相手の"隠れ心理"抽出**: 会話の中から、相手が特に「大切にしている価値観」や「本音だと感じられる発言」を3つ抜粋し、解説してください。
+4. **コミュニケーション相性診断**: 二人の言葉遣いや会話のテンポから、コミュニケーションのスタイルを分析し、「〇〇で繋がりを深めるタイプ」といった形で相性を診断してください。
+5. **「最高の瞬間」ハイライト**: このトーク履歴の中で、二人の心が最も通い合ったと感じられる瞬間を1つ選び出し、その時の会話の素晴らしい点を解説してください。
+6. **恋の未来予測**: これまでの会話データと心理分析に基づき、二人の関係性がポジティブに進展するための、心理学的な観点からの**優しい未来予測**を記述してください。
+7. **恋の処方箋・アクションチェックリスト**: 以下の4項目について、具体的かつ実践的なアドバイスを箇条書きで作成してください。
+   - **今日送ると効果的なメッセージ例**: （★★1つにつき80文字以内で、最大3つ★★）
+   - **相手のタイプ別・心に刺さるキーワード**: （単語や褒め言葉）
+   - **今は控えるべきNG行動**: （具体的な行動を優しく指摘）
+   - **次回鑑定のおすすめタイミング**: （具体的なタイミング）
+# 最終出力
+上記の分析結果をすべて含め、以下の構成でレポートを作成してください。
+- 導入文, **恋の温度グラフの解説**, 総合脈あり度と、その理由, 恋の心理レポート, 「最高の瞬間」の振り返り, **恋の未来予測**, **恋の処方箋・アクションチェックリスト**, ユーザーへのケアメッセージ, 最後に、ユーザーを温かく励ます一言
+重要: 必ず日本語で、{your_name}さんに語りかけるような親しみやすい文体で書いてください。出力は最大8000文字以内に抑えてください。
+"""
     return prompt
 
 def save_diagnosis_result(user_id, partner_name, pulse_score, summary):
@@ -316,7 +363,14 @@ def show_main_app():
                     st.pyplot(fig_graph); plt.close(fig_graph)
                     try:
                         genai.configure(api_key=st.session_state.api_key)
-                        model_name_to_use = st.session_state.get("selected_model", "gemini-2.5-flash")
+                        
+                        if "selected_model" in st.session_state:
+                            model_name_to_use = st.session_state.selected_model
+                        else:
+                            # テストをスキップした場合、リストの先頭をデフォルトとして使う
+                            model_name_to_use = "models/gemini-1.5-flash-latest"
+                        
+                        st.info(f"（デバッグ情報：モデル '{model_name_to_use}' を使用して鑑定します）")
                         model = genai.GenerativeModel(model_name_to_use)
                         messages_summary = smart_extract_text(messages, max_chars=8000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
@@ -352,3 +406,4 @@ st.write("---")
 if not st.session_state.authenticated: show_login_screen()
 elif not st.session_state.api_key: show_api_key_screen()
 else: show_main_app()
+
