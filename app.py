@@ -1,5 +1,3 @@
-
-
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -399,7 +397,19 @@ def show_main_app():
                         messages_summary = smart_extract_text(messages, max_chars=5000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
                         
-                        response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 6144, "temperature": 0.75})
+                        # AIのセーフティ設定を調整（ブロックされにくくする）
+                        safety_settings = [
+                            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+                        ]
+
+                        response = model.generate_content(
+                            final_prompt,
+                            generation_config={"max_output_tokens": 6144, "temperature": 0.75},
+                            safety_settings=safety_settings # ← この設定を追加
+                        )
                         ai_response_text = response.text
                         
                         st.markdown("---"); st.markdown(ai_response_text)
@@ -410,13 +420,13 @@ def show_main_app():
                         
                         pdf_data = create_pdf(ai_response_text, img_buffer, character)
                         st.download_button("📄 鑑定書をPDFでダウンロード", pdf_data, f"恋の鑑定書.pdf", "application/pdf", use_container_width=True)
+                    
                     except Exception as e:
                         st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
-                        with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
-        except Exception as e:
-            st.error("💫 ごめんなさい、予期しないエラーが発生しました...")
-            with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
-            
+                        # どんなエラーが起きているか、より具体的に表示する
+                        with st.expander("🔧 詳細"):
+                            st.code(f"{e}\n\n{traceback.format_exc()}")
+
     with st.expander("⚙️ 設定"):
         if st.button("🔓 ログアウト"):
             for key in list(st.session_state.keys()): del st.session_state[key]
