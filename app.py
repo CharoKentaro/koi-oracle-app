@@ -55,16 +55,15 @@ def get_japanese_font():
     try: return japanize_matplotlib.get_font_path()
     except: return None
 
+# +++ 修正後 +++
 def validate_and_test_api_key(api_key):
+    """APIキーの形式のみをチェックし、実際の通信テストは行わないバージョン"""
     if not api_key or not api_key.startswith("AIza") or len(api_key) < 39:
-        return False, "APIキーの形式が正しくありません。"
-    try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro')
-        model.generate_content("こんにちは", generation_config={"max_output_tokens": 10})
-        return True, "APIキーは有効です！接続に成功しました！"
-    except Exception as e:
-        return False, f"APIキーが無効、または一時的な接続エラーが発生しました。"
+        # 形式が明らかに違う場合のみエラーを返す
+        return False, "APIキーの形式が正しくないようです。（'AIza'で始まり、39文字以上である必要があります）"
+    
+    # 形式が合っていれば、通信テストはせずに「成功」とみなす
+    return True, "APIキーの形式は正しいです！保存しました！"
 
 def parse_line_chat(text_data):
     lines = text_data.strip().split('\n')
