@@ -1,4 +1,39 @@
 
+ありがとうございます！
+評価と改善案は以下です！！
+私たちの100点を目指して、修正していきましょう！
+適切に修正をして、**「変更なし」などと、省略せずに**、コード全体を出力してくださいませ！
+
+
+
+—————————————————
+
+
+ありがとうございます！！以下のような修正であっていますか？エラーは発生することなく、正常に動作しますか？また、BOOTHユーザーに、ぶっ刺さりますか？前回と同様に評価して点数をつけて、修正の前に改善案を詳しく教えてくださいませ！
+（ほめるべき点は、たくさんほめてあげてくださいませっ）
+
+
+
+—————————————————
+
+
+さっそくですが、以下のコードをご覧ください。
+
+
+このコードを実行すると、以下のようなエラーがでます。
+
+
+
+
+
+
+
+
+
+
+
+
+
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -288,7 +323,7 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.ln(5)
     graph_img_buffer.seek(0)
     pdf.image(graph_img_buffer, x=pdf.get_x(), y=pdf.get_y(), w=190)
-    return pdf.output()
+    return bytes(pdf.output())
 
 def show_login_screen():
     st.header("ようこそ、鑑定の世界へ")
