@@ -562,30 +562,27 @@ def show_main_app():
             with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
 
 
-    with st.expander("⚙️ 設定"):
+with st.expander("⚙️ 設定"):
         if st.button("🔓 ログアウト"):
-        try:
-            # 1. セッション状態をクリア
-            st.session_state.clear()  # または for ループで削除
-            
-            # 2. Cookieを更新（delete ではなく、空の値を設定）
             try:
+                # 1. セッション情報をすべてクリア
+                st.session_state.clear()
+                
+                # 2. Cookieの値を上書きして無効化する
                 cookies["authenticated"] = "False"
                 cookies["api_key"] = ""
                 cookies["user_id"] = ""
                 cookies["selected_model"] = ""
                 cookies.save()
-            except AttributeError:
-                # cookies.save() が使えない場合の代替処理
-                pass
+                
+                # 3. ユーザーに成功を伝え、リロードする
+                st.success("ログアウトしました。")
+                time.sleep(0.5) # メッセージを読ませるための短い待機
+                st.rerun()
             
-            st.success("ログアウトしました。")
-            time.sleep(0.5)
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"ログアウト中にエラーが発生しました: {e}")
-
+            except Exception as e:
+                # 万が一ログアウト処理でエラーが起きた場合
+                st.error(f"ログアウト中に予期しないエラーが発生しました: {e}")
 
 
 # --- メインの実行ロジック ---
