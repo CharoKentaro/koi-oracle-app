@@ -367,12 +367,10 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.cell(0, 10, f"鑑定日: {datetime.now().strftime('%Y年%m月%d日')}", align='C')
 
     # ===== 3. 本文ページの作成 =====
+
     pdf.add_page()
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font(font_name, '', 11)
-
-    # フォントサイズ11の1.8倍の行間にする（数値を大きくすると行間が広がる）
-    pdf.set_line_height(11 * 1.8)  # 11（フォントサイズ） × 1.8（倍率）
+    pdf.set_font(font_name, '', 12)  # ★ 11 → 12 に変更
 
     # 1. 見出し（###）を、大きく目立つ「h2」タグに変換する
     html_text = re.sub(r'###\s*(.*?)\s*(\n|<br>|$)', r'<h2>\1</h2>', ai_response_text)
@@ -381,17 +379,10 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     html_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', html_text)
 
     # 3. 通常の改行を、段落を意味する「p」タグに変換し、適度な間隔を空ける
-    paragraphs = [f"<p>{p.strip()}</p>" for p in html_text.split('\n') if p.strip()]
+    paragraphs = [f"<p>{p.strip()}<br></p>" for p in html_text.split('\n') if p.strip()]  # ★ 各段落の最後に <br> を追加
+    html_text = "<br><br>".join(paragraphs)  # ★ 段落間も広く
 
-    # ★★★ ここを修正：段落の間に空行を追加 ★★★
-    # 修正前: html_text = "".join(paragraphs)
-    # 修正後: 各段落の間に <br> を2つ挿入（空行1行分）
-    html_text = "<br><br>".join(paragraphs)
-
-    # h2タグ（見出し）の後には、さらにスペースを追加して、より見やすくする
-    # ★★★ ここも修正：見出し後の空白を増やす ★★★
-    # 修正前: html_text = html_text.replace("</h2><p>", "</h2><p><br></p><p>")
-    # 修正後: <br> を3つに増やす（空行1.5行分）
+    # h2タグ（見出し）の後には、さらにスペースを追加
     html_text = html_text.replace("</h2><p>", "</h2><br><br><br><p>")
 
     pdf.write_html(html_text)
