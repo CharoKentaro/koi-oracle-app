@@ -560,11 +560,33 @@ def show_main_app():
         except Exception as e:
             st.error("💫 ごめんなさい、ファイルの読み込み中に予期しないエラーが発生しました。")
             with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
+
+
     with st.expander("⚙️ 設定"):
-        if st.button("🔓 ログアウト"):
-            for key in list(st.session_state.keys()): del st.session_state[key]
-            cookies.delete("authenticated"); cookies.delete("api_key"); cookies.delete("user_id"); cookies.save()
+    if st.button("🔓 ログアウト"):
+        try:
+            # 1. セッション状態をクリア
+            st.session_state.clear()  # または for ループで削除
+            
+            # 2. Cookieを更新（delete ではなく、空の値を設定）
+            try:
+                cookies["authenticated"] = "False"
+                cookies["api_key"] = ""
+                cookies["user_id"] = ""
+                cookies["selected_model"] = ""
+                cookies.save()
+            except AttributeError:
+                # cookies.save() が使えない場合の代替処理
+                pass
+            
+            st.success("ログアウトしました。")
+            time.sleep(0.5)
             st.rerun()
+            
+        except Exception as e:
+            st.error(f"ログアウト中にエラーが発生しました: {e}")
+
+
 
 # --- メインの実行ロジック ---
 st.title("🌙 恋のオラクル AI星譚")
@@ -573,4 +595,3 @@ st.write("---")
 if not st.session_state.authenticated: show_login_screen()
 elif not st.session_state.api_key: show_api_key_screen()
 else: show_main_app()
-
