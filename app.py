@@ -366,14 +366,11 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.set_font(font_name, '', 11)
     pdf.cell(0, 10, f"鑑定日: {datetime.now().strftime('%Y年%m月%d日')}", align='C')
 
-
-    # --- 本文ページの作成 ---
+# --- 本文ページの作成 ---
     pdf.add_page()
     pdf.set_text_color(0, 0, 0)
- 
-    # 行の高さ（line height）を設定します。数値を大きくすると行間が広がります。
-    # 通常はフォントサイズの1.2〜1.5倍くらいが読みやすいです。
-    # フォントサイズが11ptなので、高さ8mmくらいが適度な行間になります。
+
+    # 行の高さ（line height）を設定します。
     LINE_HEIGHT_NORMAL = 8  # 通常の本文の行の高さ (mm)
     LINE_HEIGHT_H2 = 12     # 見出しの行の高さ (mm)
 
@@ -386,20 +383,34 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
             # 空行の場合は、少しスペースを空ける
             pdf.ln(LINE_HEIGHT_NORMAL / 2)
             continue
-
-        # 見出し行（###）の場合
-        if line.startswith('###'):
-            pdf.ln(LINE_HEIGHT_NORMAL) # 見出しの前に少しスペースを空ける
-            pdf.set_font(font_name, 'B', 16) # フォントを太字・大きく
-            # '### ' の部分を取り除いてテキストを描画
-            pdf.multi_cell(0, LINE_HEIGHT_H2, line[4:].strip(), align='L')
-            pdf.ln(LINE_HEIGHT_NORMAL / 2) # 見出しの後にも少しスペース
-            pdf.set_font(font_name, '', 11) # フォントを通常に戻す
         
-        # 通常の本文行の場合
+        # 以下の if / else ブロック全体を for ループの内側に移動させました。
+        # これで、すべての行が正しく処理されます。
+        if line.startswith('###'):
+            # 見出しの処理
+            pdf.ln(LINE_HEIGHT_NORMAL)
+            pdf.set_font(font_name, 'B', 16)
+            pdf.multi_cell(0, LINE_HEIGHT_H2, line[4:].strip(), align='L')
+            pdf.set_font(font_name, '', 11)
         else:
-            # multi_cell を使うことで、長い文章も自動で改行してくれます
-            pdf.multi_cell(0, LINE_HEIGHT_NORMAL, line, align='L')
+            # 通常の本文の処理
+            parts = re.split(r'(\*\*.*?\*\*)', line)
+            
+            for part in parts:
+                if not part:
+                    continue
+                
+                if part.startswith('**') and part.endswith('**'):
+                    # 太字部分
+                    pdf.set_font(font_name, 'B', 11)
+                    pdf.write(LINE_HEIGHT_NORMAL, part[2:-2])
+                    pdf.set_font(font_name, '', 11)
+                else:
+                    # 通常のテキスト
+                    pdf.write(LINE_HEIGHT_NORMAL, part)
+            
+            # 1行の処理が終わったら必ず改行
+            pdf.ln(LINE_HEIGHT_NORMAL)
 
     
     # ===== 4. グラフページの作成 =====
