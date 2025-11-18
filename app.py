@@ -366,26 +366,41 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.set_font(font_name, '', 11)
     pdf.cell(0, 10, f"鑑定日: {datetime.now().strftime('%Y年%m月%d日')}", align='C')
 
-    # ===== 3. 本文ページの作成 =====
 
+    # --- 本文ページの作成 ---
     pdf.add_page()
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font(font_name, '', 12)  # ★ 11 → 12 に変更
+ 
+    # 行の高さ（line height）を設定します。数値を大きくすると行間が広がります。
+    # 通常はフォントサイズの1.2〜1.5倍くらいが読みやすいです。
+    # フォントサイズが11ptなので、高さ8mmくらいが適度な行間になります。
+    LINE_HEIGHT_NORMAL = 8  # 通常の本文の行の高さ (mm)
+    LINE_HEIGHT_H2 = 12     # 見出しの行の高さ (mm)
 
-    # 1. 見出し（###）を、大きく目立つ「h2」タグに変換する
-    html_text = re.sub(r'###\s*(.*?)\s*(\n|<br>|$)', r'<h2>\1</h2>', ai_response_text)
+    # AIの応答を一行ずつに分割
+    lines = ai_response_text.split('\n')
 
-    # 2. 太字（**太字**）を「b」タグに変換する
-    html_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', html_text)
+    for line in lines:
+        line = line.strip()
+        if not line:
+            # 空行の場合は、少しスペースを空ける
+            pdf.ln(LINE_HEIGHT_NORMAL / 2)
+            continue
 
-    # 3. 通常の改行を、段落を意味する「p」タグに変換し、適度な間隔を空ける
-    paragraphs = [f"<p>{p.strip()}<br></p>" for p in html_text.split('\n') if p.strip()]  # ★ 各段落の最後に <br> を追加
-    html_text = "<br><br>".join(paragraphs)  # ★ 段落間も広く
+        # 見出し行（###）の場合
+        if line.startswith('###'):
+            pdf.ln(LINE_HEIGHT_NORMAL) # 見出しの前に少しスペースを空ける
+            pdf.set_font(font_name, 'B', 16) # フォントを太字・大きく
+            # '### ' の部分を取り除いてテキストを描画
+            pdf.multi_cell(0, LINE_HEIGHT_H2, line[4:].strip(), align='L')
+            pdf.ln(LINE_HEIGHT_NORMAL / 2) # 見出しの後にも少しスペース
+            pdf.set_font(font_name, '', 11) # フォントを通常に戻す
+        
+        # 通常の本文行の場合
+        else:
+            # multi_cell を使うことで、長い文章も自動で改行してくれます
+            pdf.multi_cell(0, LINE_HEIGHT_NORMAL, line, align='L')
 
-    # h2タグ（見出し）の後には、さらにスペースを追加
-    html_text = html_text.replace("</h2><p>", "</h2><br><br><br><p>")
-
-    pdf.write_html(html_text)
     
     # ===== 4. グラフページの作成 =====
     pdf.add_page()
@@ -547,5 +562,4 @@ st.write("---")
 if not st.session_state.authenticated: show_login_screen()
 elif not st.session_state.api_key: show_api_key_screen()
 else: show_main_app()
-
 
