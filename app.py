@@ -460,11 +460,17 @@ def show_main_app():
             except Exception as e:
                 st.error(f"ログアウト中に予期しないエラーが発生しました: {e}")
 
-# --- メインの実行ロジック ---
+# メインの実行ロジック部分
 st.title("🌙 恋のオラクル AI星譚")
 st.caption("- 心の羅針盤 Edition -")
 st.write("---")
 
+# Cookieの準備完了を確認
+if not cookies.ready():
+    st.info("🔄 アプリを準備しています...")
+    st.stop()
+
+# 認証状態の確認
 if not st.session_state.authenticated:
     show_login_screen()
 elif not st.session_state.api_key:
