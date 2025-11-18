@@ -563,7 +563,7 @@ def show_main_app():
 
 
     with st.expander("⚙️ 設定"):
-    if st.button("🔓 ログアウト"):
+        if st.button("🔓 ログアウト"):
         try:
             # 1. セッション状態をクリア
             st.session_state.clear()  # または for ループで削除
