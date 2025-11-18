@@ -48,31 +48,35 @@ def load_valid_users_from_sheet():
         st.code(f"エラー詳細: {e}")
         return []
 
-# ---------------------------------------------------------------------
+
 # --- 初期設定と準備 ---
-# ---------------------------------------------------------------------
 try:
     COOKIE_PASSWORD = st.secrets["auth"]["cookie_password"]
-    # ★★★ 変更：スプレッドシートから動的にユーザーリストを取得 ★★★
     VALID_USER_IDS = load_valid_users_from_sheet()
 except (KeyError, FileNotFoundError):
     st.error("認証設定ファイル（secrets.toml）が見つからないか、内容が正しくありません。")
     st.stop()
 
 cookies = EncryptedCookieManager(password=COOKIE_PASSWORD)
+
+# ★★★【最重要修正】Cookieの準備中にメッセージを表示し、真っ白画面を防ぐ ★★★
 if not cookies.ready():
+    st.title("🌙 恋のオラクル AI星譚")
+    st.caption("- 心の羅針盤 Edition -")
+    st.write("---")
+    st.info("🔄 アプリを準備しています。少々お待ちください...")
     st.stop()
 
-# セッション情報の初期化
-if "authenticated" not in st.session_state:
+# セッション情報の初期化（一度だけ実行）
+if "session_initialized" not in st.session_state:
     st.session_state.authenticated = cookies.get("authenticated", "False") == "True"
-if "api_key" not in st.session_state:
     st.session_state.api_key = cookies.get("api_key", None)
-if "user_id" not in st.session_state:
     st.session_state.user_id = cookies.get("user_id", None)
+    st.session_state.session_initialized = True
 
 DATA_DIR = "data"
 os.makedirs(DATA_DIR, exist_ok=True)
+
 
 # ---------------------------------------------------------------------
 # 補助関数 (ここから下は既存の関数、変更なし)
@@ -443,22 +447,49 @@ def show_main_app():
             st.error("💫 ごめんなさい、ファイルの読み込み中に予期しないエラーが発生しました。")
             with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
     
-    # ★★★ 変更：設定セクションをメインアプリ画面の「一番下」に移動 ★★★
+    # ★★★【設定セクション改善】★★★
     st.write("---")
-    with st.expander("⚙️ 設定"):
-        if st.button("🔓 ログアウト"):
-            try:
-                st.session_state.clear()
-                cookies["authenticated"] = "False"
-                cookies["api_key"] = ""
-                cookies["user_id"] = ""
-                cookies["selected_model"] = ""
-                cookies.save()
-                st.success("ログアウトしました。")
-                time.sleep(0.5)
+    with st.expander("⚙️ 設定", expanded=False):
+        st.write("### アプリ情報")
+        
+        # オプション：管理者向け機能
+        if st.session_state.user_id == "charo1118": 
+            st.subheader("👑 管理者メニュー")
+            if st.button("🔄 ユーザーリストを再読み込み"):
+                st.cache_data.clear()
+                st.success("✅ ユーザーリストのキャッシュをクリアしました。")
+                time.sleep(1)
                 st.rerun()
-            except Exception as e:
-                st.error(f"ログアウト中に予期しないエラーが発生しました: {e}")
+        
+        st.write("### ログアウト")
+        st.caption("ログアウトすると、認証IDの入力画面に戻ります。")
+        
+        if st.button("🔓 ログアウトする", type="secondary", use_container_width=True, key="logout_button"):
+            
+            # 1. まずCookieをクリアする
+            cookies["authenticated"] = "False"
+            cookies["api_key"] = ""
+            cookies["user_id"] = ""
+            cookies["selected_model"] = ""
+            cookies.save()
+            
+            # 2. 次にセッション状態をクリアする
+            st.session_state.authenticated = False
+            st.session_state.api_key = None
+            st.session_state.user_id = None
+            keys_to_del = ["selected_model", "session_initialized"]
+            for key in keys_to_del:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            # 3. ユーザーへのフィードバック
+            st.success("✅ ログアウトしました。")
+            st.info("🔄 ログイン画面に戻ります...")
+            st.balloons()
+            
+            # 4. 確実にCookieを保存するために少し長く待つ
+            time.sleep(2)
+            st.rerun()
 
 # --- メインの実行ロジック ---
 st.title("🌙 恋のオラクル AI星譚")
