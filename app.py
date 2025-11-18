@@ -371,6 +371,9 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.set_text_color(0, 0, 0)
     pdf.set_font(font_name, '', 11)
 
+    # フォントサイズ11の1.8倍の行間にする（数値を大きくすると行間が広がる）
+    pdf.set_line_height(11 * 1.8)  # 11（フォントサイズ） × 1.8（倍率）
+
     # 1. 見出し（###）を、大きく目立つ「h2」タグに変換する
     html_text = re.sub(r'###\s*(.*?)\s*(\n|<br>|$)', r'<h2>\1</h2>', ai_response_text)
 
@@ -553,6 +556,5 @@ st.write("---")
 if not st.session_state.authenticated: show_login_screen()
 elif not st.session_state.api_key: show_api_key_screen()
 else: show_main_app()
-
 
 
