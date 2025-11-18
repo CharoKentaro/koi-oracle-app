@@ -1,8 +1,3 @@
-
-
-
-
-
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -375,23 +370,27 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.add_page()
     pdf.set_text_color(0, 0, 0)
     pdf.set_font(font_name, '', 11)
-    
+
     # 1. 見出し（###）を、大きく目立つ「h2」タグに変換する
     html_text = re.sub(r'###\s*(.*?)\s*(\n|<br>|$)', r'<h2>\1</h2>', ai_response_text)
-    
+
     # 2. 太字（**太字**）を「b」タグに変換する
     html_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', html_text)
 
     # 3. 通常の改行を、段落を意味する「p」タグに変換し、適度な間隔を空ける
     paragraphs = [f"<p>{p.strip()}</p>" for p in html_text.split('\n') if p.strip()]
-    html_text = "".join(paragraphs)
+
+    # ★★★ ここを修正：段落の間に空行を追加 ★★★
+    # 修正前: html_text = "".join(paragraphs)
+    # 修正後: 各段落の間に <br> を2つ挿入（空行1行分）
+    html_text = "<br><br>".join(paragraphs)
 
     # h2タグ（見出し）の後には、さらにスペースを追加して、より見やすくする
-    html_text = html_text.replace("</h2><p>", "</h2><p><br></p><p>")
-    
-    # ★★★★★ ここが修正点 ★★★★★
-    # 存在しない命令（set_h1_font_size, set_h2_font_size）を削除しました。
-    # write_htmlが自動で見出しを大きくしてくれるので、これらの命令は不要です。
+    # ★★★ ここも修正：見出し後の空白を増やす ★★★
+    # 修正前: html_text = html_text.replace("</h2><p>", "</h2><p><br></p><p>")
+    # 修正後: <br> を3つに増やす（空行1.5行分）
+    html_text = html_text.replace("</h2><p>", "</h2><br><br><br><p>")
+
     pdf.write_html(html_text)
     
     # ===== 4. グラフページの作成 =====
@@ -554,3 +553,6 @@ st.write("---")
 if not st.session_state.authenticated: show_login_screen()
 elif not st.session_state.api_key: show_api_key_screen()
 else: show_main_app()
+
+
+
