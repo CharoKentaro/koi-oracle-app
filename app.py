@@ -469,151 +469,193 @@ def show_main_app():
     your_name = st.text_input("💬 あなたのLINEでの名前を教えてください", placeholder="例: さくら")
     partner_name = st.text_input("💬 お相手のLINEでの名前を教えてください", placeholder="例: たくや")
     counseling_text = st.text_area("💬 今回、お相手との関係で、特にどんなことが気になりますか？", placeholder="例：最近返信が遅い…", height=100)
+    
     if not your_name or not partner_name:
         st.info("👆 まずはお二人の名前を教えてくださいね。")
         return
 
-
-
-    # ★★★ ここからが【最終確定版】の実装です ★★★
     st.write("---")
     st.header("Step 2: トーク履歴を読み込む")
 
-    # セッション状態（再実行しても消えない記憶領域）を初期化
     if "talk_data" not in st.session_state:
         st.session_state.talk_data = None
+    if "messages_parsed" not in st.session_state:
+        st.session_state.messages_parsed = None
 
     tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
 
-    # --- タブ1：ファイルアップロードの処理 ---
+    # --- タブ1：ファイルアップロード ---
     with tab1:
         st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
         uploaded_file = st.file_uploader(
-            "LINEのトーク履歴ファイル（.txt）を選択してください。", type="txt",
+            "LINEのトーク履歴ファイル（.txt）を選択してください。", 
+            type="txt",
             help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
         )
+        
         if uploaded_file is not None:
-            # ファイルがアップロードされたら、すぐにセッション状態に保存
             try:
                 raw_data = uploaded_file.getvalue()
                 encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
                 decoded_data = None
+                used_encoding = None
+                
                 for encoding in encodings:
                     try:
                         decoded_data = raw_data.decode(encoding)
-                        st.caption(f"（ファイルを{encoding}で読み込みました）")
+                        used_encoding = encoding
                         break
                     except UnicodeDecodeError:
                         continue
                 
                 if decoded_data:
-                    # ★重要★ セッション状態にデータを保存
                     st.session_state.talk_data = decoded_data
-                    # アップロードされたファイルをクリアするため、ここで一度リセット
-                    
+                    st.session_state.messages_parsed = None  # 再解析のためリセット
+                    st.success(f"✅ ファイルを{used_encoding}で読み込みました")
                 else:
                     st.error("❌ ファイルの文字コードを判定できませんでした。")
-            except Exception:
-                st.error("❌ ファイルの読み込み中にエラーが発生しました。")
+            except Exception as e:
+                st.error(f"❌ ファイルの読み込み中にエラーが発生しました: {e}")
 
-    # --- タブ2：テキスト貼り付けの処理 ---
+    # --- タブ2：テキスト貼り付け ---
     with tab2:
         st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
         st.markdown("1. LINEのトーク履歴をコピーし、下の欄に貼り付けてください。")
         
         text_input = st.text_area(
-            "コピーしたトーク履歴をここに貼り付けます", height=250, key="text_area_content"
+            "コピーしたトーク履歴をここに貼り付けます", 
+            height=250, 
+            key="text_area_content"
         )
         
         if st.button("📝 この内容で読み込む", key="text_submit_button"):
             if text_input and text_input.strip():
-                # ★重要★ ボタンが押されたらセッション状態にデータを保存
                 st.session_state.talk_data = text_input
-                st.rerun() # データを確実に反映させるために再実行
+                st.session_state.messages_parsed = None  # 再解析のためリセット
+                st.success("✅ テキストを読み込みました")
             else:
                 st.warning("⚠️ トーク履歴のデータが貼り付けられていません。")
-                # もし空でボタンが押されたら、記憶していたデータも消す
                 st.session_state.talk_data = None
 
-
-    # --- ここからが共通の処理 ---
-    # ★重要★ セッション状態にデータがあるかどうかをチェック
+    # --- 共通処理：データの解析と表示 ---
     if st.session_state.talk_data:
-        # セッションからデータを取得（これで「鑑定」ボタンを押してもデータが消えない）
         talk_data = st.session_state.talk_data
         
-        messages, _ = parse_line_chat(talk_data)
+        # メッセージ解析（一度だけ実行）
+        if st.session_state.messages_parsed is None:
+            messages, _ = parse_line_chat(talk_data)
+            st.session_state.messages_parsed = messages
+        else:
+            messages = st.session_state.messages_parsed
 
         if not messages:
             st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
+            st.markdown("""
+            💡 以下を確認してください：
+            - LINEアプリから正しくエクスポートされたファイルか
+            - ファイル形式が「テキスト形式（.txt）」になっているか
+            """)
         else:
-            st.success(f"✅ {len(messages)}件のメッセージを読み込みました！鑑定を開始してください。")
+            st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
+            
             with st.expander("🔍 読み込まれた内容の先頭部分を確認"):
-                st.code('\n'.join(talk_data.strip().split('\n')[:15]))
+                preview_lines = talk_data.strip().split('\n')[:15]
+                st.code('\n'.join(preview_lines))
             
             st.write("---")
             
+            # 鑑定ボタン
             if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
                 with st.spinner("星々からのメッセージを読み解いています...✨"):
-
-
-                    previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
-                    if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
-                    color_map_graph = {"1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"), "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"), "3. 星の言葉で語る、ミステリアスな占い師系": ("#9370db", "#e6e6fa")}
-                    line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
-                    temp_data, trend = calculate_temperature(messages)
-                    fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
-                    if temp_data.get('labels'):
-                        ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
-                        ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
-                        plt.xticks(rotation=45, ha="right")
-                    ax_graph.set_title('二人の恋の温度グラフ', fontsize=14, pad=20)
-                    plt.tight_layout()
-                    img_buffer = io.BytesIO()
-                    fig_graph.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
-                    img_buffer.seek(0)
-                    st.pyplot(fig_graph); plt.close(fig_graph)
                     try:
+                        previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
+                        if previous_data: 
+                            st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
+                        
+                        # グラフ生成
+                        color_map_graph = {
+                            "1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"), 
+                            "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"), 
+                            "3. 星の言葉で語る、ミステリアスな占い師系": ("#9370db", "#e6e6fa")
+                        }
+                        line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
+                        temp_data, trend = calculate_temperature(messages)
+                        
+                        fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
+                        if temp_data.get('labels'):
+                            ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
+                            ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
+                            plt.xticks(rotation=45, ha="right")
+                        ax_graph.set_title('二人の恋の温度グラフ', fontsize=14, pad=20)
+                        plt.tight_layout()
+                        
+                        img_buffer = io.BytesIO()
+                        fig_graph.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+                        img_buffer.seek(0)
+                        st.pyplot(fig_graph)
+                        plt.close(fig_graph)
+                        
+                        # AI鑑定実行
                         genai.configure(api_key=st.session_state.api_key)
                         user_override_model = cookies.get("user_custom_model")
                         default_model = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
                         model_name_to_use = user_override_model if user_override_model else default_model
+                        
                         st.caption(f"（使用AIモデル: {model_name_to_use}）")
                         model = genai.GenerativeModel(model_name_to_use)
+                        
                         messages_summary = smart_extract_text(messages, max_chars=8000)
                         long_term_summary = create_long_term_summary(messages, max_chars=4000)
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data)
-                        safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
-                        response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 8192, "temperature": 0.75}, safety_settings=safety_settings)
+                        
+                        safety_settings = [
+                            {"category": c, "threshold": "BLOCK_NONE"} 
+                            for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]
+                        ]
+                        
+                        response = model.generate_content(
+                            final_prompt, 
+                            generation_config={"max_output_tokens": 8192, "temperature": 0.75}, 
+                            safety_settings=safety_settings
+                        )
+                        
                         ai_response_text = ""
-                        try: ai_response_text = response.text
+                        try: 
+                            ai_response_text = response.text
                         except Exception:
-                            if hasattr(response, "parts") and response.parts: ai_response_text = response.parts[0].text
+                            if hasattr(response, "parts") and response.parts: 
+                                ai_response_text = response.parts[0].text
+                        
                         if not ai_response_text:
                             st.error("💫 AIからの応答がブロックされたか、内容が空でした。")
-                            if hasattr(response, 'prompt_feedback'): st.write("🔍 **AIからのフィードバック:**"); st.code(f"{response.prompt_feedback}")
+                            if hasattr(response, 'prompt_feedback'): 
+                                st.write("🔍 **AIからのフィードバック:**")
+                                st.code(f"{response.prompt_feedback}")
                             return
-                        st.markdown("---"); st.markdown(ai_response_text)
+                        
+                        st.markdown("---")
+                        st.markdown(ai_response_text)
+                        
                         pulse_score = extract_pulse_score_from_response(ai_response_text)
                         st.info(f"🔍 抽出された脈あり度: {pulse_score}% (この数値が保存されます)")
+                        
                         summary = extract_summary_from_response(ai_response_text)
                         save_diagnosis_result(st.session_state.user_id, partner_name, pulse_score, summary)
-                        if previous_data: st.info(f"📊 比較: 前回の脈あり度 {previous_data.get('pulse_score', 0)}% → 今回抽出された脈あり度 {pulse_score}%")
+                        
+                        if previous_data: 
+                            st.info(f"📊 比較: 前回の脈あり度 {previous_data.get('pulse_score', 0)}% → 今回 {pulse_score}%")
+                        
                         pdf_data = create_pdf(ai_response_text, img_buffer, character)
                         st.download_button("📄 鑑定書をPDFでダウンロード", pdf_data, f"恋の鑑定書.pdf", "application/pdf", use_container_width=True)
+                        
                     except Exception:
                         st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
-                        with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
-                        
-    # ★★★【設定セクション】は、このブロックの外にあるので、変更の影響を受けません ★★★
-    st.write("---")
+                        with st.expander("🔧 詳細"):
+                            st.code(f"{traceback.format_exc()}")
     
-    # ★★★【設定セクション改善】★★★
+    # 設定セクション
     st.write("---")
-    # 1つの「設定」ブロックにすべてをまとめる
     with st.expander("⚙️ 設定", expanded=False):
-        
-        # 1. 予備AIモデル設定
         st.write("### 予備AIモデル設定")
         st.info("通常はこの設定は不要です。将来、新しいモデルが発表されたり、通常使用しているモデルでエラーが発生するようになった場合に新しいモデル名を設定してください。通常、放置してくださってOKです。")
 
@@ -634,19 +676,20 @@ def show_main_app():
                     cookies["user_custom_model"] = new_model_name
                     cookies.save()
                     st.success(message + " 予備設定を保存しました。")
-                    time.sleep(1); st.rerun()
+                    time.sleep(1)
+                    st.rerun()
                 else:
                     st.error(message)
             else:
                 cookies["user_custom_model"] = ""
                 cookies.save()
                 st.success("✅ 予備設定をクリアしました。通常の自動選択モデルを使用します。")
-                time.sleep(1); st.rerun()
+                time.sleep(1)
+                st.rerun()
         
         st.write("---")
-
-        # 2. アプリ情報と管理者メニュー
         st.write("### アプリ情報")
+        
         if st.session_state.user_id == "charo1118": 
             st.subheader("👑 管理者メニュー")
             if st.button("🔄 ユーザーリストを再読み込み"):
@@ -656,17 +699,30 @@ def show_main_app():
                 st.rerun()
 
         st.write("---")
-
-        # 3. ログアウト機能
         st.write("### ログアウト")
         st.caption("ログアウトすると、認証IDの入力画面に戻ります。")
+        
         if st.button("🔓 ログアウトする", type="secondary", use_container_width=True, key="logout_button"):
-            # (ログアウト処理の中身は変更なし)
-            cookies["authenticated"] = "False"; cookies["api_key"] = ""; cookies["user_id"] = ""; cookies["selected_model"] = ""; cookies.save()
-            st.session_state.authenticated = False; st.session_state.api_key = None; st.session_state.user_id = None
-            keys_to_del = ["selected_model", "session_initialized"]; [st.session_state.pop(key, None) for key in keys_to_del]
-            st.success("✅ ログアウトしました。"); st.info("🔄 ログイン画面に戻ります..."); st.balloons()
-            time.sleep(2); st.rerun()
+            cookies["authenticated"] = "False"
+            cookies["api_key"] = ""
+            cookies["user_id"] = ""
+            cookies["selected_model"] = ""
+            cookies.save()
+            
+            st.session_state.authenticated = False
+            st.session_state.api_key = None
+            st.session_state.user_id = None
+            
+            keys_to_del = ["selected_model", "session_initialized", "talk_data", "messages_parsed"]
+            for key in keys_to_del:
+                if key in st.session_state:
+                    del st.session_state[key]
+            
+            st.success("✅ ログアウトしました。")
+            st.info("🔄 ログイン画面に戻ります...")
+            st.balloons()
+            time.sleep(2)
+            st.rerun()
 
 
 # --- メインの実行ロジック ---
