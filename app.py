@@ -1,3 +1,5 @@
+### ▼▼▼ このコードを app.py に丸ごと貼り付けてください ▼▼▼
+
 import streamlit as st
 from streamlit_cookies_manager import EncryptedCookieManager
 import time
@@ -27,8 +29,7 @@ st.set_page_config(page_title="恋のオラクル AI星譚", page_icon="🌙", l
 # ---------------------------------------------------------------------
 # --- 補助関数 (Googleスプレッドシート連携) ---
 # ---------------------------------------------------------------------
-# ★★★ 新設：Googleスプレッドシートから認証ユーザーを取得する関数 ★★★
-@st.cache_data(ttl=300)  # 5分間キャッシュ（頻繁に更新する場合は短くする）
+@st.cache_data(ttl=300)
 def load_valid_users_from_sheet():
     """Googleスプレッドシートから有効なユーザーIDのリストを取得します。"""
     try:
@@ -40,7 +41,7 @@ def load_valid_users_from_sheet():
         client = gspread.authorize(creds)
         spreadsheet_id = st.secrets["spreadsheet"]["id"]
         sheet = client.open_by_key(spreadsheet_id).sheet1
-        user_ids = sheet.col_values(1)[1:]  # A列の2行目以降を取得
+        user_ids = sheet.col_values(1)[1:]
         valid_user_ids = [uid.strip() for uid in user_ids if uid.strip()]
         return valid_user_ids
     except Exception as e:
@@ -59,7 +60,6 @@ except (KeyError, FileNotFoundError):
 
 cookies = EncryptedCookieManager(password=COOKIE_PASSWORD)
 
-# ★★★【最重要修正】Cookieの準備中にメッセージを表示し、真っ白画面を防ぐ ★★★
 if not cookies.ready():
     st.title("🌙 恋のオラクル AI星譚")
     st.caption("- 心の羅針盤 Edition -")
@@ -67,7 +67,6 @@ if not cookies.ready():
     st.info("🔄 アプリを準備しています。少々お待ちください...")
     st.stop()
 
-# セッション情報の初期化（一度だけ実行）
 if "session_initialized" not in st.session_state:
     st.session_state.authenticated = cookies.get("authenticated", "False") == "True"
     st.session_state.api_key = cookies.get("api_key", None)
@@ -90,7 +89,6 @@ def get_japanese_font():
 def validate_and_test_api_key(api_key):
     if not api_key or not api_key.startswith("AIza") or len(api_key) < 39:
         return False, "APIキーの形式が正しくないようです。（'AIza'で始まり、39文字以上である必要があります）"
-    # ★★★ 修正：正しいモデルリストに戻す ★★★
     model_candidates = [
         "models/gemini-2.5-flash",
         "models/gemini-flash-latest",
@@ -116,11 +114,9 @@ def validate_and_test_api_key(api_key):
     elif "api has not been used" in error_message: return False, "APIキーは正しいですが、Google Cloudで「Generative Language API」が有効になっていません。"
     else: return False, "APIキーが無効、または一時的な接続エラーが発生しました。"
 
-# validate_and_test_api_key 関数の下に追加
 def test_model_name(api_key, model_name):
-    """指定されたモデル名が有効かテストする"""
     if not model_name or "models/" not in model_name:
-        return False, "モデル名の形式が正しくないようです。（例: models/gemini-2.5-flash）"
+        return False, "モデル名の形式が正しくないようです。（例: models/gemini-1.5-flash-latest）"
     try:
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
@@ -171,59 +167,36 @@ def smart_extract_text(messages, max_chars=8000):
         truncated_text = line + "\n" + truncated_text
     return truncated_text
 
-
-
-# smart_extract_text 関数のすぐ下にでも貼り付けてください
-
 def create_long_term_summary(messages, max_chars=4000):
-    """
-    トーク履歴全体から、関係性の流れがわかるようにダイジェストを作成します。
-    「初期」「中期」「後期」の3つの期間から均等に会話を抽出します。
-    """
     text_lines = [f"{msg['sender']}: {msg['message']}" for msg in messages]
     if not text_lines:
         return "会話データがありません。"
-
     full_text = "\n".join(text_lines)
     if len(full_text) <= max_chars:
-        return full_text # 全文が指定文字数以下なら、そのまま返す
-
+        return full_text
     summary = []
-    
-    # 期間を3つに分割
     total_lines = len(text_lines)
     part_size = total_lines // 3
-    
-    # 各期間から抽出する目標文字数
     chars_per_part = max_chars // 3
-
-    # パート1: 初期
     part1_lines = text_lines[:part_size]
     part1_text = ""
     for line in part1_lines:
         if len(part1_text) + len(line) > chars_per_part: break
         part1_text += line + "\n"
     summary.append("--- 関係の初期 ---\n" + part1_text)
-
-    # パート2: 中期
     part2_lines = text_lines[part_size : part_size * 2]
     part2_text = ""
     for line in part2_lines:
         if len(part2_text) + len(line) > chars_per_part: break
         part2_text += line + "\n"
     summary.append("--- 関係の中期 ---\n" + part2_text)
-    
-    # パート3: 後期
     part3_lines = text_lines[part_size * 2 :]
     part3_text = ""
-    for line in part3_lines:
+    for line in reversed(part3_lines):
         if len(part3_text) + len(line) > chars_per_part: break
-        part3_text += line + "\n"
+        part3_text = line + "\n" + part3_text
     summary.append("--- 関係の後期 ---\n" + part3_text)
-
     return "\n\n".join(summary)
-
-
 
 def calculate_temperature(messages):
     daily_scores = Counter()
@@ -248,20 +221,13 @@ def calculate_temperature(messages):
     return {'labels': labels, 'values': values}, trend
 
 def build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data=None):
-    # ★★★ ここからが重要 ★★★
-    # キャラクターの「役割」と「名前」をセットで定義します
     character_map = {
         "1. 優しく包み込む、お姉さん系": ("優しく包み込むお姉さんタイプの鑑定師", "碧月（みつき）"),
         "2. ロジカルに鋭く分析する、専門家系": ("ロジカルに鋭く分析する専門家タイプの鑑定師", "詩音（しおん）"),
         "3. 星の言葉で語る、ミステリアスな占い師系": ("星の言葉で語るミステリアスな占い師", "セレスティア")
     }
-    # character_mapから役割と名前を取り出します
     char_info, char_name = character_map.get(character, (character, "AI鑑定師"))
-    # ★★★ ここまでを追加・修正 ★★★
-
     tone_instruction = {"癒し 100%": "とにかく優しく、温かく包み込むような言葉遣いで。否定的な表現は避け、常に希望を見出してください。", "癒し 50% × 論理 50%": "優しさと客観性のバランスを保ちながら、事実も伝えつつ励ましてください。", "冷静にロジカル": "感情に流されず、客観的なデータと論理的な分析を中心に伝えてください。"}
-    
-    # ↓↓↓ これで char_info と char_name が正しく使われます
     prompt = f"""あなたは【{char_info}】の**{char_name}**です。導入部分で「こんにちは、鑑定師の{char_name}よ。」のように、必ず自分の名前をはっきりと名乗ってから会話を始めてください。ユーザーは【{tone}】のスタイルでの鑑定を望んでいます。{tone_instruction.get(tone, '')} このトーンと言葉遣いを、出力の最後まで徹底して維持してください。**重要: あなたは鑑定の最初から最後まで、キャラクターの口調・語尾・ニュアンスを完全に一定に保ち、文体が途中で絶対に変化しないよう、強く意識してください。**以下のデータを基に、単なる占いではない、心理分析に基づいた詳細な「恋の心理レポート」を作成してください。
 
 # ユーザー情報
@@ -287,13 +253,11 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
 # 基本データ分析
 - 会話の温度グラフの傾向: {trend}
 
-# ★★★ 変更点2: AIへの指示に「関係性の歴史」の項目を追加 ★★★
-- 【関係性の歴史（全期間のダイジェスト）】:
+# 関係性の歴史（全期間のダイジェスト）
 {long_term_summary}
 
-- 【直近の詳細な会話（分析対象）】:
+# 直近の詳細な会話（分析対象）
 {messages_summary}
-
 
 # AIによる深層分析依頼
 1. **感情の波の分析**: トーク履歴全体を通して、「ポジティブ」「ネガティブ」な感情表現は、それぞれどのような傾向で推移していますか？
@@ -318,14 +282,17 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
 
 def save_diagnosis_result(user_id, partner_name, pulse_score, summary):
     if not user_id: return
-    file_path, data = os.path.join(DATA_DIR, f"{user_id}.json"), []
+    file_path = os.path.join(DATA_DIR, f"{user_id}.json")
+    data = []
     if os.path.exists(file_path):
         try:
-            with open(file_path, 'r', encoding='utf-8') as f: data = json.load(f)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
         except: pass
     data.append({"date": datetime.now().isoformat(), "partner_name": partner_name, "pulse_score": pulse_score, "summary": summary})
     try:
-        with open(file_path, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False, indent=2)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
     except: pass
 
 def load_previous_diagnosis(user_id, partner_name):
@@ -333,9 +300,11 @@ def load_previous_diagnosis(user_id, partner_name):
     file_path = os.path.join(DATA_DIR, f"{user_id}.json")
     if not os.path.exists(file_path): return None
     try:
-        with open(file_path, 'r', encoding='utf-8') as f: data = json.load(f)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
         for record in reversed(data):
-            if record.get("partner_name") == partner_name: return record
+            if record.get("partner_name") == partner_name:
+                return record
     except: return None
     return None
 
@@ -352,7 +321,8 @@ def extract_pulse_score_from_response(ai_response):
     return 0
 
 def extract_summary_from_response(ai_response):
-    lines, summary_parts = ai_response.split('\n'), []
+    lines = ai_response.split('\n')
+    summary_parts = []
     for line in lines:
         if '脈あり度' in line or '総合' in line:
             summary_parts.append(line.strip())
@@ -446,8 +416,10 @@ def show_login_screen():
         if user_id in VALID_USER_IDS:
             st.session_state.authenticated, st.session_state.user_id = True, user_id
             cookies["authenticated"], cookies["user_id"] = "True", user_id
-            cookies.save(); st.rerun()
-            else: st.error("認証に失敗しました。IDが正しいか確認してください。")
+            cookies.save()
+            st.rerun()
+        else:
+            st.error("認証に失敗しました。IDが正しいか確認してください。")
 
 def show_api_key_screen():
     st.success("認証に成功しました！")
@@ -458,8 +430,12 @@ def show_api_key_screen():
         if is_valid:
             st.session_state.api_key = api_key_input
             cookies["api_key"] = api_key_input
-            cookies.save(); st.success(message); time.sleep(1); st.rerun()
-        else: st.error(message)
+            cookies.save()
+            st.success(message)
+            time.sleep(1)
+            st.rerun()
+        else:
+            st.error(message)
 
 def show_main_app():
     st.success("✨ AI鑑定師との接続が完了しました！")
@@ -484,7 +460,6 @@ def show_main_app():
 
     tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
 
-    # --- タブ1：ファイルアップロード ---
     with tab1:
         st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
         uploaded_file = st.file_uploader(
@@ -492,14 +467,12 @@ def show_main_app():
             type="txt",
             help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
         )
-        
         if uploaded_file is not None:
             try:
                 raw_data = uploaded_file.getvalue()
                 encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
                 decoded_data = None
                 used_encoding = None
-                
                 for encoding in encodings:
                     try:
                         decoded_data = raw_data.decode(encoding)
@@ -507,41 +480,35 @@ def show_main_app():
                         break
                     except UnicodeDecodeError:
                         continue
-                
                 if decoded_data:
                     st.session_state.talk_data = decoded_data
-                    st.session_state.messages_parsed = None  # 再解析のためリセット
+                    st.session_state.messages_parsed = None
                     st.success(f"✅ ファイルを{used_encoding}で読み込みました")
                 else:
                     st.error("❌ ファイルの文字コードを判定できませんでした。")
             except Exception as e:
                 st.error(f"❌ ファイルの読み込み中にエラーが発生しました: {e}")
 
-    # --- タブ2：テキスト貼り付け ---
     with tab2:
         st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
         st.markdown("1. LINEのトーク履歴をコピーし、下の欄に貼り付けてください。")
-        
         text_input = st.text_area(
             "コピーしたトーク履歴をここに貼り付けます", 
             height=250, 
             key="text_area_content"
         )
-        
         if st.button("📝 この内容で読み込む", key="text_submit_button"):
             if text_input and text_input.strip():
                 st.session_state.talk_data = text_input
-                st.session_state.messages_parsed = None  # 再解析のためリセット
+                st.session_state.messages_parsed = None
                 st.success("✅ テキストを読み込みました")
             else:
                 st.warning("⚠️ トーク履歴のデータが貼り付けられていません。")
                 st.session_state.talk_data = None
 
-    # --- 共通処理：データの解析と表示 ---
     if st.session_state.talk_data:
         talk_data = st.session_state.talk_data
         
-        # メッセージ解析（一度だけ実行）
         if st.session_state.messages_parsed is None:
             messages, _ = parse_line_chat(talk_data)
             st.session_state.messages_parsed = messages
@@ -550,21 +517,13 @@ def show_main_app():
 
         if not messages:
             st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
-            st.markdown("""
-            💡 以下を確認してください：
-            - LINEアプリから正しくエクスポートされたファイルか
-            - ファイル形式が「テキスト形式（.txt）」になっているか
-            """)
         else:
             st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
-            
             with st.expander("🔍 読み込まれた内容の先頭部分を確認"):
                 preview_lines = talk_data.strip().split('\n')[:15]
                 st.code('\n'.join(preview_lines))
-            
             st.write("---")
             
-            # 鑑定ボタン
             if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
                 with st.spinner("星々からのメッセージを読み解いています...✨"):
                     try:
@@ -572,7 +531,6 @@ def show_main_app():
                         if previous_data: 
                             st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
                         
-                        # グラフ生成
                         color_map_graph = {
                             "1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"), 
                             "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"), 
@@ -580,7 +538,6 @@ def show_main_app():
                         }
                         line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
                         temp_data, trend = calculate_temperature(messages)
-                        
                         fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
                         if temp_data.get('labels'):
                             ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
@@ -595,7 +552,6 @@ def show_main_app():
                         st.pyplot(fig_graph)
                         plt.close(fig_graph)
                         
-                        # AI鑑定実行
                         genai.configure(api_key=st.session_state.api_key)
                         user_override_model = cookies.get("user_custom_model")
                         default_model = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
@@ -653,7 +609,6 @@ def show_main_app():
                         with st.expander("🔧 詳細"):
                             st.code(f"{traceback.format_exc()}")
     
-    # 設定セクション
     st.write("---")
     with st.expander("⚙️ 設定", expanded=False):
         st.write("### 予備AIモデル設定")
@@ -730,8 +685,6 @@ st.title("🌙 恋のオラクル AI星譚")
 st.caption("- 心の羅針盤 Edition -")
 st.write("---")
 
-# ★★★【メインロジック堅牢化】★★★
-# セッション情報の初期化とCookieからの復元を、画面表示の直前に集約
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = cookies.get("authenticated", "False") == "True"
 if "api_key" not in st.session_state:
@@ -739,7 +692,6 @@ if "api_key" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = cookies.get("user_id", None)
 
-# 認証状態に応じて画面を表示
 if not st.session_state.authenticated:
     show_login_screen()
 elif not st.session_state.api_key:
