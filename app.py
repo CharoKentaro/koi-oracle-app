@@ -597,7 +597,7 @@ if st.session_state.talk_data:
                         if not ai_response_text:
                             st.error("💫 AIからの応答がブロックされたか、内容が空でした。")
                             if hasattr(response, 'prompt_feedback'): st.write("🔍 **AIからのフィードバック:**"); st.code(f"{response.prompt_feedback}")
-                            return
+                        return
                         st.markdown("---"); st.markdown(ai_response_text)
                         pulse_score = extract_pulse_score_from_response(ai_response_text)
                         st.info(f"🔍 抽出された脈あり度: {pulse_score}% (この数値が保存されます)")
