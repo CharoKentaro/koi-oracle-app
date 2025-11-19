@@ -153,6 +153,60 @@ def smart_extract_text(messages, max_chars=8000):
         truncated_text = line + "\n" + truncated_text
     return truncated_text
 
+
+
+# smart_extract_text 関数のすぐ下にでも貼り付けてください
+
+def create_long_term_summary(messages, max_chars=4000):
+    """
+    トーク履歴全体から、関係性の流れがわかるようにダイジェストを作成します。
+    「初期」「中期」「後期」の3つの期間から均等に会話を抽出します。
+    """
+    text_lines = [f"{msg['sender']}: {msg['message']}" for msg in messages]
+    if not text_lines:
+        return "会話データがありません。"
+
+    full_text = "\n".join(text_lines)
+    if len(full_text) <= max_chars:
+        return full_text # 全文が指定文字数以下なら、そのまま返す
+
+    summary = []
+    
+    # 期間を3つに分割
+    total_lines = len(text_lines)
+    part_size = total_lines // 3
+    
+    # 各期間から抽出する目標文字数
+    chars_per_part = max_chars // 3
+
+    # パート1: 初期
+    part1_lines = text_lines[:part_size]
+    part1_text = ""
+    for line in part1_lines:
+        if len(part1_text) + len(line) > chars_per_part: break
+        part1_text += line + "\n"
+    summary.append("--- 関係の初期 ---\n" + part1_text)
+
+    # パート2: 中期
+    part2_lines = text_lines[part_size : part_size * 2]
+    part2_text = ""
+    for line in part2_lines:
+        if len(part2_text) + len(line) > chars_per_part: break
+        part2_text += line + "\n"
+    summary.append("--- 関係の中期 ---\n" + part2_text)
+    
+    # パート3: 後期
+    part3_lines = text_lines[part_size * 2 :]
+    part3_text = ""
+    for line in part3_lines:
+        if len(part3_text) + len(line) > chars_per_part: break
+        part3_text += line + "\n"
+    summary.append("--- 関係の後期 ---\n" + part3_text)
+
+    return "\n\n".join(summary)
+
+
+
 def calculate_temperature(messages):
     daily_scores = Counter()
     for msg in messages:
@@ -175,7 +229,7 @@ def calculate_temperature(messages):
         elif prev_avg > 0 and last_avg < prev_avg * 0.8: trend = "下降傾向"
     return {'labels': labels, 'values': values}, trend
 
-def build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data=None):
+def build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data=None):
     character_map = {"1. 優しく包み込む、お姉さん系": "優しく包み込むお姉さんタイプの鑑定師", "2. ロジカルに鋭く分析する、専門家系": "ロジカルに鋭く分析する専門家タイプの鑑定師", "3. 星の言葉で語る、ミステリアスな占い師系": "星の言葉で語るミステリアスな占い師"}
     tone_instruction = {"癒し 100%": "とにかく優しく、温かく包み込むような言葉遣いで。否定的な表現は避け、常に希望を見出してください。", "癒し 50% × 論理 50%": "優しさと客観性のバランスを保ちながら、事実も伝えつつ励ましてください。", "冷静にロジカル": "感情に流されず、客観的なデータと論理的な分析を中心に伝えてください。"}
     prompt = f"""あなたは【{character_map.get(character, character)}】です。ユーザーは【{tone}】のスタイルでの鑑定を望んでいます。{tone_instruction.get(tone, '')} このトーンと言葉遣いを、出力の最後まで徹底して維持してください。**重要: あなたは鑑定の最初から最後まで、キャラクターの口調・語尾・ニュアン
@@ -203,7 +257,14 @@ def build_prompt(character, tone, your_name, partner_name, counseling_text, mess
     prompt += f"""
 # 基本データ分析
 - 会話の温度グラフの傾向: {trend}
-- 分析対象の会話抜粋:\n{messages_summary}
+
+# ★★★ 変更点2: AIへの指示に「関係性の歴史」の項目を追加 ★★★
+- 【関係性の歴史（全期間のダイジェスト）】:
+{long_term_summary}
+
+- 【直近の詳細な会話（分析対象）】:
+{messages_summary}
+
 
 # AIによる深層分析依頼
 1. **感情の波の分析**: トーク履歴全体を通して、「ポジティブ」「ネガティブ」な感情表現は、それぞれどのような傾向で推移していますか？
@@ -420,8 +481,18 @@ def show_main_app():
                         genai.configure(api_key=st.session_state.api_key)
                         model_name_to_use = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
                         model = genai.GenerativeModel(model_name_to_use)
+                        
+                        # ★★★ 追加ここから ★★★
+                        # 1. 直近の会話（最大8000文字）を準備
                         messages_summary = smart_extract_text(messages, max_chars=8000)
-                        final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, trend, previous_data)
+                        # 2. 全期間のダイジェスト（最大4000文字）を新しい関数で作成
+                        long_term_summary = create_long_term_summary(messages, max_chars=4000)
+                        # ★★★ 追加ここまで ★★★
+
+                        # ★★★ 変更 ★★★
+                        # AIへの指示書に、新しく作った long_term_summary を渡す
+                        final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data)
+
                         safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
                         response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 8192, "temperature": 0.75}, safety_settings=safety_settings)
                         ai_response_text = ""
