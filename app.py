@@ -513,23 +513,27 @@ def show_main_app():
                 with st.expander("🔧 エラー詳細"):
                     st.code(f"{traceback.format_exc()}")
 
+
     # --- タブ2：テキスト貼り付けの処理 ---
-    with tab2:
-        st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
-        st.markdown("""
-        1. LINEアプリでトーク履歴をテキスト形式でエクスポート（または共有）
-        2. 表示されたテキストを**すべてコピー**
-        3. 下の入力欄に**貼り付け**
-        """)
-        
-        text_input = st.text_area(
-            "コピーしたトーク履歴をここに貼り付けてください",
-            height=250,
-            placeholder="ここにLINEのトーク履歴を貼り付けます...",
-        )
-        
-        if text_input and text_input.strip():
-            talk_data = text_input
+with tab2:
+    st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
+    st.markdown("""
+    ### 📋 使い方
+    1. LINEアプリでトーク履歴をテキスト形式でエクスポート（または共有）
+    2. 表示されたテキストを**すべてコピー**
+    3. 下の入力欄に**貼り付け**
+    """)
+    
+    text_input = st.text_area(
+        "コピーしたトーク履歴をここに貼り付けてください",
+        height=250,
+        placeholder="ここにLINEのトーク履歴を貼り付けます...",
+    )
+    
+    if text_input and text_input.strip():
+        talk_data = text_input
+        st.success("✅ テキストを正常に読み込みました！")
+
 
     # --- ここから、タブ1とタブ2の共通処理が始まります ---
     if talk_data:
