@@ -478,74 +478,71 @@ def show_main_app():
     st.write("---")
     st.header("Step 2: トーク履歴を読み込む")
 
-    # タブUIで「ファイルアップロード」と「テキスト貼り付け」の2つの選択肢を提供します
     tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
 
-    talk_data = None  # どちらかの方法で取得したトーク履歴データを、この変数に格納します
+    # --- セッション状態の初期化 ---
+    if "talk_data" not in st.session_state:
+        st.session_state.talk_data = None
 
     # --- タブ1：ファイルアップロードの処理 ---
     with tab1:
-        st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。テキストを貼り付けも選べます。隣のタブを選んでください。")
+        st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
         uploaded_file = st.file_uploader(
-            "LINEのトーク履歴ファイル（.txt）を選択してください。", 
+            "LINEのトーク履歴ファイル（.txt）を選択してください。",
             type="txt",
             help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
         )
-        
         if uploaded_file is not None:
             try:
                 raw_data = uploaded_file.getvalue()
-                # 複数の文字コードを試行します
                 encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
+                decoded_data = None
                 for encoding in encodings:
                     try:
-                        talk_data = raw_data.decode(encoding)
+                        decoded_data = raw_data.decode(encoding)
                         st.caption(f"（ファイルを{encoding}で読み込みました）")
                         break
                     except UnicodeDecodeError:
                         continue
                 
-                if talk_data is None:
-                    st.error("❌ ファイルの文字コードを判定できませんでした。お手数ですが「テキストを貼り付け」タブから直接内容を貼り付けてみてください。")
-                    
-            except Exception as e:
-                st.error("❌ ファイルの読み込み中に予期せぬエラーが発生しました。")
-                with st.expander("🔧 エラー詳細"):
-                    st.code(f"{traceback.format_exc()}")
-
+                if decoded_data:
+                    st.session_state.talk_data = decoded_data
+                else:
+                    st.error("❌ ファイルの文字コードを判定できませんでした。")
+            except Exception:
+                st.error("❌ ファイルの読み込み中にエラーが発生しました。")
 
     # --- タブ2：テキスト貼り付けの処理 ---
     with tab2:
         st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
-        st.markdown("""
-        ### 📋 使い方
-        1. LINEアプリでトーク履歴をテキスト形式でエクスポート（または共有）
-        2. 表示されたテキストを**すべてコピー**
-        3. 下の入力欄に**貼り付け**
-        """)
-    
-    text_input = st.text_area(
-        "コピーしたトーク履歴をここに貼り付けてください",
-        height=250,
-        placeholder="ここにLINEのトーク履歴を貼り付けます...",
-    )
-    
-    if text_input and text_input.strip():
-        talk_data = text_input
-        st.success("✅ テキストを正常に読み込みました！")
-
-
-    # --- ここから、タブ1とタブ2の共通処理が始まります ---
-    if talk_data:
-        # 読み込まれたデータを使って、メッセージを解析します
-        messages, _ = parse_line_chat(talk_data)
+        st.markdown("1. LINEのトーク履歴をコピーし、下の欄に貼り付けてください。")
         
+        text_input = st.text_area(
+            "コピーしたトーク履歴をここに貼り付けます",
+            height=250,
+            key="text_area_content"
+        )
+        
+        # テキストエリアに何か入力されていれば、「読み込み」ボタンを表示
+        if text_input and text_input.strip():
+            if st.button("📝 この内容で読み込む", key="text_submit_button"):
+                st.session_state.talk_data = st.session_state.text_area_content
+                st.rerun() # データを確実に反映させるために再実行
+
+    # --- ここからが共通の処理 ---
+    if st.session_state.talk_data:
+        talk_data = st.session_state.talk_data # セッションからデータを取得
+        
+        # 画面に「読み込み完了」メッセージを表示
+        st.success("✅ トーク履歴を正常に読み込みました！")
+        
+        messages, _ = parse_line_chat(talk_data)
+
         if not messages:
             st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
-            st.info("💡 貼り付けた内容や、選択したファイルが正しいLINEのトーク履歴かご確認ください。")
         else:
-            st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
-            with st.expander("🔍 読み込まれた内容の先頭部分を確認", expanded=False):
+            st.info(f"➡️ {len(messages)}件のメッセージを解析しました。下のボタンから鑑定を開始できます。")
+            with st.expander("🔍 読み込まれた内容の先頭部分を確認"):
                 st.code('\n'.join(talk_data.strip().split('\n')[:15]))
             
             st.write("---")
