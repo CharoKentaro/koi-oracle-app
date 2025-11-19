@@ -391,7 +391,7 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
     pdf.set_text_color(255, 255, 255)
     pdf.set_y(110)
     pdf.set_font(font_name, 'B', 26)
-    pdf.cell(0, 15, "恋のオラクル AI星譚", new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.cell(0, 15, "恋のオラクル AI恋星譚", new_x="LMARGIN", new_y="NEXT", align='C')
     pdf.set_font(font_name, '', 14)
     pdf.cell(0, 10, "- 心の羅針盤 Edition -", new_x="LMARGIN", new_y="NEXT", align='C')
     pdf.ln(40)
@@ -670,7 +670,7 @@ def show_main_app():
 
 
 # --- メインの実行ロジック ---
-st.title("🌙 恋のオラクル AI星譚")
+st.title("🌙 恋のオラクル AI恋星譚")
 st.caption("- 心の羅針盤 Edition -")
 st.write("---")
 
