@@ -61,7 +61,7 @@ cookies = EncryptedCookieManager(password=COOKIE_PASSWORD)
 
 # ★★★【最重要修正】Cookieの準備中にメッセージを表示し、真っ白画面を防ぐ ★★★
 if not cookies.ready():
-    st.title("🌙 恋のオラクル AI星譚")
+    st.title("🌙 恋のオラクル AI恋星譚")
     st.caption("- 心の羅針盤 Edition -")
     st.write("---")
     st.info("🔄 アプリを準備しています。少々お待ちください...")
