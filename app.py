@@ -439,28 +439,6 @@ def create_pdf(ai_response_text, graph_img_buffer, character):
 # ---------------------------------------------------------------------
 # --- 画面表示と実行ロジック ---
 # ---------------------------------------------------------------------
-def show_login_screen():
-    st.header("ようこそ、鑑定の世界へ")
-    user_id = st.text_input("BOOTHの購入者IDを入力してください", key="login_user_id")
-    if st.button("認証する", key="login_button"):
-        if user_id in VALID_USER_IDS:
-            st.session_state.authenticated, st.session_state.user_id = True, user_id
-            cookies["authenticated"], cookies["user_id"] = "True", user_id
-            cookies.save(); st.rerun()
-        else: st.error("認証に失敗しました。IDが正しいか確認してください。")
-
-def show_api_key_screen():
-    st.success("認証に成功しました！")
-    st.header("🔮 AI鑑定師との接続設定")
-    api_key_input = st.text_input("Gemini APIキーをここに貼り付けてください", type="password", key="api_input")
-    if st.button("APIキーをテストして保存する", key="api_save_button"):
-        is_valid, message = validate_and_test_api_key(api_key_input)
-        if is_valid:
-            st.session_state.api_key = api_key_input
-            cookies["api_key"] = api_key_input
-            cookies.save(); st.success(message); time.sleep(1); st.rerun()
-        else: st.error(message)
-
 def show_main_app():
     st.success("✨ AI鑑定師との接続が完了しました！")
     st.header("Step 1: 鑑定の準備")
@@ -474,160 +452,160 @@ def show_main_app():
         return
 
 
-# ★★★ ここからが【堅牢性を高めた】実装です ★★★
-st.write("---")
-st.header("Step 2: トーク履歴を読み込む")
+    # ★★★ ここからが【堅牢性を高めた】実装です ★★★
+    st.write("---")
+    st.header("Step 2: トーク履歴を読み込む")
 
-# セッション状態（再実行しても消えない記憶領域）を初期化
-if "talk_data" not in st.session_state:
-    st.session_state.talk_data = None
-# ★★★ 追加：解析済みのメッセージを保存する場所を用意 ★★★
-if "messages_parsed" not in st.session_state:
-    st.session_state.messages_parsed = None
+    # セッション状態（再実行しても消えない記憶領域）を初期化
+    if "talk_data" not in st.session_state:
+        st.session_state.talk_data = None
+    # ★★★ 追加：解析済みのメッセージを保存する場所を用意 ★★★
+    if "messages_parsed" not in st.session_state:
+        st.session_state.messages_parsed = None
 
 
-tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
+    tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
 
-# --- タブ1：ファイルアップロードの処理 ---
-with tab1:
-    st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
-    uploaded_file = st.file_uploader(
-        "LINEのトーク履歴ファイル（.txt）を選択してください。", type="txt",
-        help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
-    )
-    if uploaded_file is not None:
-        # ファイルがアップロードされたら、内容を読み込んでセッションに保存
-        try:
-            raw_data = uploaded_file.getvalue()
-            encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
-            decoded_data = None
-            for encoding in encodings:
-                try:
-                    decoded_data = raw_data.decode(encoding)
-                    st.caption(f"（ファイルを{encoding}で読み込みました）")
-                    break
-                except UnicodeDecodeError:
-                    continue
-            
-            if decoded_data:
+    # --- タブ1：ファイルアップロードの処理 ---
+    with tab1:
+        st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
+        uploaded_file = st.file_uploader(
+            "LINEのトーク履歴ファイル（.txt）を選択してください。", type="txt",
+            help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
+        )
+        if uploaded_file is not None:
+            # ファイルがアップロードされたら、内容を読み込んでセッションに保存
+            try:
+                raw_data = uploaded_file.getvalue()
+                encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
+                decoded_data = None
+                for encoding in encodings:
+                    try:
+                        decoded_data = raw_data.decode(encoding)
+                        st.caption(f"（ファイルを{encoding}で読み込みました）")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                
+                if decoded_data:
+                    # ★★★ 修正：st.rerun() を削除し、解析状態をリセット ★★★
+                    st.session_state.talk_data = decoded_data
+                    st.session_state.messages_parsed = None # 新しいデータなので、解析結果をクリア
+                else:
+                    st.error("❌ ファイルの文字コードを判定できませんでした。")
+            except Exception:
+                st.error("❌ ファイルの読み込み中にエラーが発生しました。")
+
+    # --- タブ2：テキスト貼り付けの処理 ---
+    with tab2:
+        st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
+        st.markdown("1. LINEのトーク履歴をコピーし、下の欄に貼り付けてください。")
+        
+        text_input = st.text_area(
+            "コピーしたトーク履歴をここに貼り付けます", height=250, key="text_area_content"
+        )
+        
+        if st.button("📝 この内容で読み込む", key="text_submit_button"):
+            if text_input and text_input.strip():
                 # ★★★ 修正：st.rerun() を削除し、解析状態をリセット ★★★
-                st.session_state.talk_data = decoded_data
+                st.session_state.talk_data = text_input
                 st.session_state.messages_parsed = None # 新しいデータなので、解析結果をクリア
             else:
-                st.error("❌ ファイルの文字コードを判定できませんでした。")
-        except Exception:
-            st.error("❌ ファイルの読み込み中にエラーが発生しました。")
+                st.warning("⚠️ トーク履歴のデータが貼り付けられていません。")
+                st.session_state.talk_data = None
+                st.session_state.messages_parsed = None
 
-# --- タブ2：テキスト貼り付けの処理 ---
-with tab2:
-    st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
-    st.markdown("1. LINEのトーク履歴をコピーし、下の欄に貼り付けてください。")
-    
-    text_input = st.text_area(
-        "コピーしたトーク履歴をここに貼り付けます", height=250, key="text_area_content"
-    )
-    
-    if st.button("📝 この内容で読み込む", key="text_submit_button"):
-        if text_input and text_input.strip():
-            # ★★★ 修正：st.rerun() を削除し、解析状態をリセット ★★★
-            st.session_state.talk_data = text_input
-            st.session_state.messages_parsed = None # 新しいデータなので、解析結果をクリア
+
+    # --- ここからが共通の処理 ---
+    # ★重要★ セッション状態にデータがあるかどうかをチェック
+    if st.session_state.talk_data:
+        talk_data = st.session_state.talk_data
+        
+        # ★★★ 修正：一度解析したデータは再利用する ★★★
+        if st.session_state.messages_parsed is None:
+            messages, _ = parse_line_chat(talk_data)
+            st.session_state.messages_parsed = messages
         else:
-            st.warning("⚠️ トーク履歴のデータが貼り付けられていません。")
-            st.session_state.talk_data = None
-            st.session_state.messages_parsed = None
+            messages = st.session_state.messages_parsed
 
-
-# --- ここからが共通の処理 ---
-# ★重要★ セッション状態にデータがあるかどうかをチェック
-if st.session_state.talk_data:
-    talk_data = st.session_state.talk_data
-    
-    # ★★★ 修正：一度解析したデータは再利用する ★★★
-    if st.session_state.messages_parsed is None:
-        messages, _ = parse_line_chat(talk_data)
-        st.session_state.messages_parsed = messages
-    else:
-        messages = st.session_state.messages_parsed
-
-    if not messages:
-        st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
-    else:
-        st.success(f"✅ {len(messages)}件のメッセージを読み込みました！鑑定を開始してください。")
-        with st.expander("🔍 読み込まれた内容の先頭部分を確認"):
-            st.code('\n'.join(talk_data.strip().split('\n')[:15]))
-        
-        st.write("---")
-        
-        if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
-            with st.spinner("星々からのメッセージを読み解いています...✨"):
-                previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
-                if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
-                
-                color_map_graph = {"1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"), "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"), "3. 星の言葉で語る、ミステリアスな占い師系": ("#9370db", "#e6e6fa")}
-                line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
-                temp_data, trend = calculate_temperature(messages)
-                fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
-                
-                if temp_data.get('labels'):
-                    ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
-                    ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
-                    plt.xticks(rotation=45, ha="right")
-                
-                ax_graph.set_title('二人の恋の温度グラフ', fontsize=14, pad=20)
-                plt.tight_layout()
-                img_buffer = io.BytesIO()
-                fig_graph.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
-                img_buffer.seek(0)
-                st.pyplot(fig_graph); plt.close(fig_graph)
-                
-                try:
-                    genai.configure(api_key=st.session_state.api_key)
-                    user_override_model = cookies.get("user_custom_model")
-                    default_model = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
-                    model_name_to_use = user_override_model if user_override_model else default_model
-                    st.caption(f"（使用AIモデル: {model_name_to_use}）")
-                    model = genai.GenerativeModel(model_name_to_use)
+        if not messages:
+            st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
+        else:
+            st.success(f"✅ {len(messages)}件のメッセージを読み込みました！鑑定を開始してください。")
+            with st.expander("🔍 読み込まれた内容の先頭部分を確認"):
+                st.code('\n'.join(talk_data.strip().split('\n')[:15]))
+            
+            st.write("---")
+            
+            if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
+                with st.spinner("星々からのメッセージを読み解いています...✨"):
+                    previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
+                    if previous_data: st.info(f"📖 {partner_name}さんとの前回の鑑定データが見つかりました。")
                     
-                    messages_summary = smart_extract_text(messages, max_chars=8000)
-                    long_term_summary = create_long_term_summary(messages, max_chars=4000)
-                    final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data)
+                    color_map_graph = {"1. 優しく包み込む、お姉さん系": ("#ff69b4", "#ffb6c1"), "2. ロジカルに鋭く分析する、専門家系": ("#1e90ff", "#add8e6"), "3. 星の言葉で語る、ミステリアスな占い師系": ("#9370db", "#e6e6fa")}
+                    line_color, fill_color = color_map_graph.get(character, ("#ff69b4", "#ffb6c1"))
+                    temp_data, trend = calculate_temperature(messages)
+                    fig_graph, ax_graph = plt.subplots(figsize=(10, 6))
                     
-                    safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
-                    response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 8192, "temperature": 0.75}, safety_settings=safety_settings)
+                    if temp_data.get('labels'):
+                        ax_graph.plot(temp_data['labels'], temp_data['values'], marker='o', color=line_color, linewidth=2)
+                        ax_graph.fill_between(temp_data['labels'], temp_data['values'], color=fill_color, alpha=0.5)
+                        plt.xticks(rotation=45, ha="right")
                     
-                    ai_response_text = ""
-                    try: 
-                        ai_response_text = response.text
-                    except Exception:
-                        if hasattr(response, "parts") and response.parts: 
-                            ai_response_text = response.parts[0].text
+                    ax_graph.set_title('二人の恋の温度グラフ', fontsize=14, pad=20)
+                    plt.tight_layout()
+                    img_buffer = io.BytesIO()
+                    fig_graph.savefig(img_buffer, format='png', dpi=300, bbox_inches='tight')
+                    img_buffer.seek(0)
+                    st.pyplot(fig_graph); plt.close(fig_graph)
+                    
+                    try:
+                        genai.configure(api_key=st.session_state.api_key)
+                        user_override_model = cookies.get("user_custom_model")
+                        default_model = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
+                        model_name_to_use = user_override_model if user_override_model else default_model
+                        st.caption(f"（使用AIモデル: {model_name_to_use}）")
+                        model = genai.GenerativeModel(model_name_to_use)
+                        
+                        messages_summary = smart_extract_text(messages, max_chars=8000)
+                        long_term_summary = create_long_term_summary(messages, max_chars=4000)
+                        final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data)
+                        
+                        safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
+                        response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 8192, "temperature": 0.75}, safety_settings=safety_settings)
+                        
+                        ai_response_text = ""
+                        try: 
+                            ai_response_text = response.text
+                        except Exception:
+                            if hasattr(response, "parts") and response.parts: 
+                                ai_response_text = response.parts[0].text
+                                
+                        if not ai_response_text:
+                            st.error("💫 AIからの応答がブロックされたか、内容が空でした。")
+                            if hasattr(response, 'prompt_feedback'): 
+                                st.write("🔍 **AIからのフィードバック:**")
+                                st.code(f"{response.prompt_feedback}")
+                            return
                             
-                    if not ai_response_text:
-                        st.error("💫 AIからの応答がブロックされたか、内容が空でした。")
-                        if hasattr(response, 'prompt_feedback'): 
-                            st.write("🔍 **AIからのフィードバック:**")
-                            st.code(f"{response.prompt_feedback}")
-                        return # ここが正しく tryブロック → withブロック → if buttonブロック → defブロック の内側にある
+                        st.markdown("---"); st.markdown(ai_response_text)
                         
-                    st.markdown("---"); st.markdown(ai_response_text)
-                    
-                    pulse_score = extract_pulse_score_from_response(ai_response_text)
-                    st.info(f"🔍 抽出された脈あり度: {pulse_score}% (この数値が保存されます)")
-                    
-                    summary = extract_summary_from_response(ai_response_text)
-                    save_diagnosis_result(st.session_state.user_id, partner_name, pulse_score, summary)
-                    
-                    if previous_data: 
-                        st.info(f"📊 比較: 前回の脈あり度 {previous_data.get('pulse_score', 0)}% → 今回抽出された脈あり度 {pulse_score}%")
+                        pulse_score = extract_pulse_score_from_response(ai_response_text)
+                        st.info(f"🔍 抽出された脈あり度: {pulse_score}% (この数値が保存されます)")
                         
-                    pdf_data = create_pdf(ai_response_text, img_buffer, character)
-                    st.download_button("📄 鑑定書をPDFでダウンロード", pdf_data, f"恋の鑑定書.pdf", "application/pdf", use_container_width=True)
-                    
-                except Exception:
-                    st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
-                    with st.expander("🔧 詳細"): 
-                        st.code(f"{traceback.format_exc()}")
+                        summary = extract_summary_from_response(ai_response_text)
+                        save_diagnosis_result(st.session_state.user_id, partner_name, pulse_score, summary)
+                        
+                        if previous_data: 
+                            st.info(f"📊 比較: 前回の脈あり度 {previous_data.get('score', 0)}% → 今回抽出された脈あり度 {pulse_score}%")
+                            
+                        pdf_data = create_pdf(ai_response_text, img_buffer, character)
+                        st.download_button("📄 鑑定書をPDFでダウンロード", pdf_data, f"恋の鑑定書.pdf", "application/pdf", use_container_width=True)
+                        
+                    except Exception:
+                        st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
+                        with st.expander("🔧 詳細"): 
+                            st.code(f"{traceback.format_exc()}")
                         
     # ★★★【設定セクション】は、このブロックの外にあるので、変更の影響を受けません ★★★
     st.write("---")
