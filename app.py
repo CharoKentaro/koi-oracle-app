@@ -474,87 +474,92 @@ def show_main_app():
         return
 
 
+# ★★★ ここからが【堅牢性を高めた】実装です ★★★
+st.write("---")
+st.header("Step 2: トーク履歴を読み込む")
 
-    # ★★★ ここからが【最終確定版】の実装です ★★★
-    st.write("---")
-    st.header("Step 2: トーク履歴を読み込む")
+# セッション状態（再実行しても消えない記憶領域）を初期化
+if "talk_data" not in st.session_state:
+    st.session_state.talk_data = None
+# ★★★ 追加：解析済みのメッセージを保存する場所を用意 ★★★
+if "messages_parsed" not in st.session_state:
+    st.session_state.messages_parsed = None
 
-    # セッション状態（再実行しても消えない記憶領域）を初期化
-    if "talk_data" not in st.session_state:
-        st.session_state.talk_data = None
 
-    tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
+tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
 
-    # --- タブ1：ファイルアップロードの処理 ---
-    with tab1:
-        st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
-        uploaded_file = st.file_uploader(
-            "LINEのトーク履歴ファイル（.txt）を選択してください。", type="txt",
-            help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
-        )
-        if uploaded_file is not None:
-            # ファイルがアップロードされたら、すぐにセッション状態に保存
-            try:
-                raw_data = uploaded_file.getvalue()
-                encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
-                decoded_data = None
-                for encoding in encodings:
-                    try:
-                        decoded_data = raw_data.decode(encoding)
-                        st.caption(f"（ファイルを{encoding}で読み込みました）")
-                        break
-                    except UnicodeDecodeError:
-                        continue
-                
-                if decoded_data:
-                    # ★重要★ セッション状態にデータを保存
-                    st.session_state.talk_data = decoded_data
-                    # アップロードされたファイルをクリアするため、ここで一度リセット
-                    st.rerun()
-                else:
-                    st.error("❌ ファイルの文字コードを判定できませんでした。")
-            except Exception:
-                st.error("❌ ファイルの読み込み中にエラーが発生しました。")
-
-    # --- タブ2：テキスト貼り付けの処理 ---
-    with tab2:
-        st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
-        st.markdown("1. LINEのトーク履歴をコピーし、下の欄に貼り付けてください。")
-        
-        text_input = st.text_area(
-            "コピーしたトーク履歴をここに貼り付けます", height=250, key="text_area_content"
-        )
-        
-        if st.button("📝 この内容で読み込む", key="text_submit_button"):
-            if text_input and text_input.strip():
-                # ★重要★ ボタンが押されたらセッション状態にデータを保存
-                st.session_state.talk_data = text_input
-                st.rerun() # データを確実に反映させるために再実行
+# --- タブ1：ファイルアップロードの処理 ---
+with tab1:
+    st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
+    uploaded_file = st.file_uploader(
+        "LINEのトーク履歴ファイル（.txt）を選択してください。", type="txt",
+        help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
+    )
+    if uploaded_file is not None:
+        # ファイルがアップロードされたら、内容を読み込んでセッションに保存
+        try:
+            raw_data = uploaded_file.getvalue()
+            encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
+            decoded_data = None
+            for encoding in encodings:
+                try:
+                    decoded_data = raw_data.decode(encoding)
+                    st.caption(f"（ファイルを{encoding}で読み込みました）")
+                    break
+                except UnicodeDecodeError:
+                    continue
+            
+            if decoded_data:
+                # ★★★ 修正：st.rerun() を削除し、解析状態をリセット ★★★
+                st.session_state.talk_data = decoded_data
+                st.session_state.messages_parsed = None # 新しいデータなので、解析結果をクリア
             else:
-                st.warning("⚠️ トーク履歴のデータが貼り付けられていません。")
-                # もし空でボタンが押されたら、記憶していたデータも消す
-                st.session_state.talk_data = None
+                st.error("❌ ファイルの文字コードを判定できませんでした。")
+        except Exception:
+            st.error("❌ ファイルの読み込み中にエラーが発生しました。")
 
-
-    # --- ここからが共通の処理 ---
-    # ★重要★ セッション状態にデータがあるかどうかをチェック
-    if st.session_state.talk_data:
-        # セッションからデータを取得（これで「鑑定」ボタンを押してもデータが消えない）
-        talk_data = st.session_state.talk_data
-        
-        messages, _ = parse_line_chat(talk_data)
-
-        if not messages:
-            st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
+# --- タブ2：テキスト貼り付けの処理 ---
+with tab2:
+    st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
+    st.markdown("1. LINEのトーク履歴をコピーし、下の欄に貼り付けてください。")
+    
+    text_input = st.text_area(
+        "コピーしたトーク履歴をここに貼り付けます", height=250, key="text_area_content"
+    )
+    
+    if st.button("📝 この内容で読み込む", key="text_submit_button"):
+        if text_input and text_input.strip():
+            # ★★★ 修正：st.rerun() を削除し、解析状態をリセット ★★★
+            st.session_state.talk_data = text_input
+            st.session_state.messages_parsed = None # 新しいデータなので、解析結果をクリア
         else:
-            st.success(f"✅ {len(messages)}件のメッセージを読み込みました！鑑定を開始してください。")
-            with st.expander("🔍 読み込まれた内容の先頭部分を確認"):
-                st.code('\n'.join(talk_data.strip().split('\n')[:15]))
-            
-            st.write("---")
-            
-            if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
-                with st.spinner("星々からのメッセージを読み解いています...✨"):
+            st.warning("⚠️ トーク履歴のデータが貼り付けられていません。")
+            st.session_state.talk_data = None
+            st.session_state.messages_parsed = None
+
+
+# --- ここからが共通の処理 ---
+# ★重要★ セッション状態にデータがあるかどうかをチェック
+if st.session_state.talk_data:
+    talk_data = st.session_state.talk_data
+    
+    # ★★★ 修正：一度解析したデータは再利用する ★★★
+    if st.session_state.messages_parsed is None:
+        messages, _ = parse_line_chat(talk_data)
+        st.session_state.messages_parsed = messages
+    else:
+        messages = st.session_state.messages_parsed
+
+    if not messages:
+        st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
+    else:
+        st.success(f"✅ {len(messages)}件のメッセージを読み込みました！鑑定を開始してください。")
+        with st.expander("🔍 読み込まれた内容の先頭部分を確認"):
+            st.code('\n'.join(talk_data.strip().split('\n')[:15]))
+        
+        st.write("---")
+        
+        if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
 
 
                     previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
