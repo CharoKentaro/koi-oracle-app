@@ -510,7 +510,7 @@ def show_main_app():
                     # ★重要★ セッション状態にデータを保存
                     st.session_state.talk_data = decoded_data
                     # アップロードされたファイルをクリアするため、ここで一度リセット
-                    st.rerun()
+                    
                 else:
                     st.error("❌ ファイルの文字コードを判定できませんでした。")
             except Exception:
