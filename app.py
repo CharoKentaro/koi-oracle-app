@@ -116,6 +116,24 @@ def validate_and_test_api_key(api_key):
     elif "api has not been used" in error_message: return False, "APIキーは正しいですが、Google Cloudで「Generative Language API」が有効になっていません。"
     else: return False, "APIキーが無効、または一時的な接続エラーが発生しました。"
 
+# validate_and_test_api_key 関数の下に追加
+def test_model_name(api_key, model_name):
+    """指定されたモデル名が有効かテストする"""
+    if not model_name or "models/" not in model_name:
+        return False, "モデル名の形式が正しくないようです。（例: models/gemini-2.5-flash）"
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(model_name)
+        model.generate_content("test", generation_config={"max_output_tokens": 10})
+        return True, f"モデル「{model_name}」は有効です！"
+    except Exception as e:
+        error_message = str(e).lower()
+        if "not found" in error_message or "invalid" in error_message:
+            return False, "モデル名が正しくないようです。コピペミスかも？もう一度入力してみてね。"
+        else:
+            return False, f"モデルのテスト中にエラーが発生しました。"
+
+
 def parse_line_chat(text_data):
     lines = text_data.strip().split('\n')
     messages, full_text, current_date = [], [], "日付不明"
@@ -230,10 +248,21 @@ def calculate_temperature(messages):
     return {'labels': labels, 'values': values}, trend
 
 def build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data=None):
-    character_map = {"1. 優しく包み込む、お姉さん系": "優しく包み込むお姉さんタイプの鑑定師", "2. ロジカルに鋭く分析する、専門家系": "ロジカルに鋭く分析する専門家タイプの鑑定師", "3. 星の言葉で語る、ミステリアスな占い師系": "星の言葉で語るミステリアスな占い師"}
+    # ★★★ ここからが重要 ★★★
+    # キャラクターの「役割」と「名前」をセットで定義します
+    character_map = {
+        "1. 優しく包み込む、お姉さん系": ("優しく包み込むお姉さんタイプの鑑定師", "碧月（みつき）"),
+        "2. ロジカルに鋭く分析する、専門家系": ("ロジカルに鋭く分析する専門家タイプの鑑定師", "詩音（しおん）"),
+        "3. 星の言葉で語る、ミステリアスな占い師系": ("星の言葉で語るミステリアスな占い師", "セレスティア")
+    }
+    # character_mapから役割と名前を取り出します
+    char_info, char_name = character_map.get(character, (character, "AI鑑定師"))
+    # ★★★ ここまでを追加・修正 ★★★
+
     tone_instruction = {"癒し 100%": "とにかく優しく、温かく包み込むような言葉遣いで。否定的な表現は避け、常に希望を見出してください。", "癒し 50% × 論理 50%": "優しさと客観性のバランスを保ちながら、事実も伝えつつ励ましてください。", "冷静にロジカル": "感情に流されず、客観的なデータと論理的な分析を中心に伝えてください。"}
-    prompt = f"""あなたは【{character_map.get(character, character)}】です。ユーザーは【{tone}】のスタイルでの鑑定を望んでいます。{tone_instruction.get(tone, '')} このトーンと言葉遣いを、出力の最後まで徹底して維持してください。**重要: あなたは鑑定の最初から最後まで、キャラクターの口調・語尾・ニュアン
-スを完全に一定に保ち、文体が途中で絶対に変化しないよう、強く意識してください。**以下のデータを基に、単なる占いではない、心理分析に基づいた詳細な「恋の心理レポート」を作成してください。
+    
+    # ↓↓↓ これで char_info と char_name が正しく使われます
+    prompt = f"""あなたは【{char_info}】の**{char_name}**です。導入部分で「こんにちは、鑑定師の{char_name}よ。」のように、必ず自分の名前をはっきりと名乗ってから会話を始めてください。ユーザーは【{tone}】のスタイルでの鑑定を望んでいます。{tone_instruction.get(tone, '')} このトーンと言葉遣いを、出力の最後まで徹底して維持してください。**重要: あなたは鑑定の最初から最後まで、キャラクターの口調・語尾・ニュアンスを完全に一定に保ち、文体が途中で絶対に変化しないよう、強く意識してください。**以下のデータを基に、単なる占いではない、心理分析に基づいた詳細な「恋の心理レポート」を作成してください。
 
 # ユーザー情報
 - ユーザー名: {your_name}
@@ -479,9 +508,16 @@ def show_main_app():
                     st.pyplot(fig_graph); plt.close(fig_graph)
                     try:
                         genai.configure(api_key=st.session_state.api_key)
-                        model_name_to_use = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
-                        model = genai.GenerativeModel(model_name_to_use)
+                        user_override_model = cookies.get("user_custom_model")
+                        # 2. 普段使う「自動選択されたモデル」を準備する
+                        default_model = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
                         
+                        # 3. 予備設定があればそちらを使い、なければ普段のモデルを使う
+                        model_name_to_use = user_override_model if user_override_model else default_model
+                        
+                        st.caption(f"（使用AIモデル: {model_name_to_use}）") # ユーザーにどのモデルを使っているか表示
+                        model = genai.GenerativeModel(model_name_to_use)
+
                         # ★★★ 追加ここから ★★★
                         # 1. 直近の会話（最大8000文字）を準備
                         messages_summary = smart_extract_text(messages, max_chars=8000)
@@ -520,10 +556,43 @@ def show_main_app():
     
     # ★★★【設定セクション改善】★★★
     st.write("---")
+    # 1つの「設定」ブロックにすべてをまとめる
     with st.expander("⚙️ 設定", expanded=False):
-        st.write("### アプリ情報")
         
-        # オプション：管理者向け機能
+        # 1. 予備AIモデル設定
+        st.write("### 予備AIモデル設定")
+        st.info("通常はこの設定は不要です。将来、新しいモデルが発表されたり、通常使用しているモデルでエラーが発生するようになった場合に、開発者からアナウンスされた新しいモデル名を設定してください。")
+
+        default_model = st.session_state.get("selected_model") or cookies.get("selected_model", "（自動選択）")
+        user_override_model = cookies.get("user_custom_model")
+        
+        st.write(f"**通常使用するモデル:** **`{default_model}`**")
+        
+        if user_override_model:
+            st.warning(f"現在、予備設定が有効です。こちらのモデルが優先されます: `{user_override_model}`")
+        
+        new_model_name = st.text_input("予備のモデル名を入力", placeholder="例: models/gemini-pro-latest", help="空のまま保存すると、予備設定がクリアされ自動選択モードに戻ります。")
+
+        if st.button("予備設定を保存", key="model_test_button"):
+            if new_model_name:
+                is_valid, message = test_model_name(st.session_state.api_key, new_model_name)
+                if is_valid:
+                    cookies["user_custom_model"] = new_model_name
+                    cookies.save()
+                    st.success(message + " 予備設定を保存しました。")
+                    time.sleep(1); st.rerun()
+                else:
+                    st.error(message)
+            else:
+                cookies["user_custom_model"] = ""
+                cookies.save()
+                st.success("✅ 予備設定をクリアしました。通常の自動選択モデルを使用します。")
+                time.sleep(1); st.rerun()
+        
+        st.write("---")
+
+        # 2. アプリ情報と管理者メニュー
+        st.write("### アプリ情報")
         if st.session_state.user_id == "charo1118": 
             st.subheader("👑 管理者メニュー")
             if st.button("🔄 ユーザーリストを再読み込み"):
@@ -531,36 +600,20 @@ def show_main_app():
                 st.success("✅ ユーザーリストのキャッシュをクリアしました。")
                 time.sleep(1)
                 st.rerun()
-        
+
+        st.write("---")
+
+        # 3. ログアウト機能
         st.write("### ログアウト")
         st.caption("ログアウトすると、認証IDの入力画面に戻ります。")
-        
         if st.button("🔓 ログアウトする", type="secondary", use_container_width=True, key="logout_button"):
-            
-            # 1. まずCookieをクリアする
-            cookies["authenticated"] = "False"
-            cookies["api_key"] = ""
-            cookies["user_id"] = ""
-            cookies["selected_model"] = ""
-            cookies.save()
-            
-            # 2. 次にセッション状態をクリアする
-            st.session_state.authenticated = False
-            st.session_state.api_key = None
-            st.session_state.user_id = None
-            keys_to_del = ["selected_model", "session_initialized"]
-            for key in keys_to_del:
-                if key in st.session_state:
-                    del st.session_state[key]
-            
-            # 3. ユーザーへのフィードバック
-            st.success("✅ ログアウトしました。")
-            st.info("🔄 ログイン画面に戻ります...")
-            st.balloons()
-            
-            # 4. 確実にCookieを保存するために少し長く待つ
-            time.sleep(2)
-            st.rerun()
+            # (ログアウト処理の中身は変更なし)
+            cookies["authenticated"] = "False"; cookies["api_key"] = ""; cookies["user_id"] = ""; cookies["selected_model"] = ""; cookies.save()
+            st.session_state.authenticated = False; st.session_state.api_key = None; st.session_state.user_id = None
+            keys_to_del = ["selected_model", "session_initialized"]; [st.session_state.pop(key, None) for key in keys_to_del]
+            st.success("✅ ログアウトしました。"); st.info("🔄 ログイン画面に戻ります..."); st.balloons()
+            time.sleep(2); st.rerun()
+
 
 # --- メインの実行ロジック ---
 st.title("🌙 恋のオラクル AI星譚")
