@@ -472,22 +472,81 @@ def show_main_app():
     if not your_name or not partner_name:
         st.info("👆 まずはお二人の名前を教えてくださいね。")
         return
+
+
+# ★★★ ここからが新しい「Step 2」の実装です ★★★
     st.write("---")
-    st.header("Step 2: トーク履歴をアップロード")
-    uploaded_file = st.file_uploader("LINEのトーク履歴ファイル（.txt）をここにアップロードしてください。", type="txt")
-    st.info("💡 どんなに長いトーク履歴でも大丈夫。AIが自動で大切な部分だけを読み取って分析します。")
-    if uploaded_file is not None:
-        try:
-            talk_data = uploaded_file.getvalue().decode("utf-8")
-            with st.expander("🔍 **【重要】アップロードされたファイルの内容を確認**", expanded=False):
-                st.info("プログラムが読み取ったファイルの中身（先頭15行）です。")
-                st.code('\n'.join(talk_data.strip().split('\n')[:15]))
-            messages, _ = parse_line_chat(talk_data)
-            if not messages:
-                 st.warning("⚠️ 有効なメッセージが見つかりませんでした。上記のファイル内容を確認してください。")
-                 return
+    st.header("Step 2: トーク履歴を読み込む")
+
+    # タブUIで「ファイルアップロード」と「テキスト貼り付け」の2つの選択肢を提供します
+    tab1, tab2 = st.tabs(["📁 ファイルをアップロード", "📝 テキストを貼り付け"])
+
+    talk_data = None  # どちらかの方法で取得したトーク履歴データを、この変数に格納します
+
+    # --- タブ1：ファイルアップロードの処理 ---
+    with tab1:
+        st.info("💡 PCでご利用の方や、ファイルを選択できる方はこちらが便利です。")
+        uploaded_file = st.file_uploader(
+            "LINEのトーク履歴ファイル（.txt）を選択してください。", 
+            type="txt",
+            help="スマホでファイル選択がうまくいかない場合は、右の「テキストを貼り付け」タブをお試しください。"
+        )
+        
+        if uploaded_file is not None:
+            try:
+                raw_data = uploaded_file.getvalue()
+                # 複数の文字コードを試行します
+                encodings = ['utf-8', 'utf-8-sig', 'shift_jis', 'cp932']
+                for encoding in encodings:
+                    try:
+                        talk_data = raw_data.decode(encoding)
+                        st.caption(f"（ファイルを{encoding}で読み込みました）")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                
+                if talk_data is None:
+                    st.error("❌ ファイルの文字コードを判定できませんでした。お手数ですが「テキストを貼り付け」タブから直接内容を貼り付けてみてください。")
+                    
+            except Exception as e:
+                st.error("❌ ファイルの読み込み中に予期せぬエラーが発生しました。")
+                with st.expander("🔧 エラー詳細"):
+                    st.code(f"{traceback.format_exc()}")
+
+    # --- タブ2：テキスト貼り付けの処理 ---
+    with tab2:
+        st.info("📱 **スマホの方や、ファイルでのアップロードがうまくいかない方はこちらをご利用ください。**")
+        st.markdown("""
+        1. LINEアプリでトーク履歴をテキスト形式でエクスポート（または共有）
+        2. 表示されたテキストを**すべてコピー**
+        3. 下の入力欄に**貼り付け**
+        """)
+        
+        text_input = st.text_area(
+            "コピーしたトーク履歴をここに貼り付けてください",
+            height=250,
+            placeholder="ここにLINEのトーク履歴を貼り付けます...",
+        )
+        
+        if text_input and text_input.strip():
+            talk_data = text_input
+
+    # --- ここから、タブ1とタブ2の共通処理が始まります ---
+    if talk_data:
+        # 読み込まれたデータを使って、メッセージを解析します
+        messages, _ = parse_line_chat(talk_data)
+        
+        if not messages:
+            st.warning("⚠️ 有効なメッセージが見つかりませんでした。")
+            st.info("💡 貼り付けた内容や、選択したファイルが正しいLINEのトーク履歴かご確認ください。")
+        else:
             st.success(f"✅ {len(messages)}件のメッセージを読み込みました！")
+            with st.expander("🔍 読み込まれた内容の先頭部分を確認", expanded=False):
+                st.code('\n'.join(talk_data.strip().split('\n')[:15]))
+            
             st.write("---")
+            
+            # ★★★ 鑑定ボタンと、その後の処理は、これまでのコードと全く同じです ★★★
             if st.button("🔮 鑑定を開始する", type="primary", use_container_width=True):
                 with st.spinner("星々からのメッセージを読み解いています...✨"):
                     previous_data = load_previous_diagnosis(st.session_state.user_id, partner_name)
@@ -509,26 +568,13 @@ def show_main_app():
                     try:
                         genai.configure(api_key=st.session_state.api_key)
                         user_override_model = cookies.get("user_custom_model")
-                        # 2. 普段使う「自動選択されたモデル」を準備する
                         default_model = st.session_state.get("selected_model") or cookies.get("selected_model") or "models/gemini-2.5-flash"
-                        
-                        # 3. 予備設定があればそちらを使い、なければ普段のモデルを使う
                         model_name_to_use = user_override_model if user_override_model else default_model
-                        
-                        st.caption(f"（使用AIモデル: {model_name_to_use}）") # ユーザーにどのモデルを使っているか表示
+                        st.caption(f"（使用AIモデル: {model_name_to_use}）")
                         model = genai.GenerativeModel(model_name_to_use)
-
-                        # ★★★ 追加ここから ★★★
-                        # 1. 直近の会話（最大8000文字）を準備
                         messages_summary = smart_extract_text(messages, max_chars=8000)
-                        # 2. 全期間のダイジェスト（最大4000文字）を新しい関数で作成
                         long_term_summary = create_long_term_summary(messages, max_chars=4000)
-                        # ★★★ 追加ここまで ★★★
-
-                        # ★★★ 変更 ★★★
-                        # AIへの指示書に、新しく作った long_term_summary を渡す
                         final_prompt = build_prompt(character, tone, your_name, partner_name, counseling_text, messages_summary, long_term_summary, trend, previous_data)
-
                         safety_settings = [{"category": c, "threshold": "BLOCK_NONE"} for c in ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
                         response = model.generate_content(final_prompt, generation_config={"max_output_tokens": 8192, "temperature": 0.75}, safety_settings=safety_settings)
                         ai_response_text = ""
@@ -550,9 +596,9 @@ def show_main_app():
                     except Exception:
                         st.error("💫 ごめんなさい、星との交信が少し途切れちゃったみたいです...")
                         with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
-        except Exception:
-            st.error("💫 ごめんなさい、ファイルの読み込み中に予期しないエラーが発生しました。")
-            with st.expander("🔧 詳細"): st.code(f"{traceback.format_exc()}")
+                        
+    # ★★★【設定セクション】は、このブロックの外にあるので、変更の影響を受けません ★★★
+    st.write("---")
     
     # ★★★【設定セクション改善】★★★
     st.write("---")
