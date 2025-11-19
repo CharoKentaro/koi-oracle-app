@@ -22,7 +22,7 @@ from google.oauth2.service_account import Credentials
 
 # ---------------------------------------------------------------------
 # --- ページの基本設定 ---
-st.set_page_config(page_title="恋のオラクル AI星譚", page_icon="🌙", layout="centered")
+st.set_page_config(page_title="恋のオラクル AI恋星譚", page_icon="🌙", layout="centered")
 
 # ---------------------------------------------------------------------
 # --- 補助関数 (Googleスプレッドシート連携) ---
