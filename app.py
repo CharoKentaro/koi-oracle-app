@@ -561,7 +561,7 @@ def show_main_app():
         
         # 1. 予備AIモデル設定
         st.write("### 予備AIモデル設定")
-        st.info("通常はこの設定は不要です。将来、新しいモデルが発表されたり、通常使用しているモデルでエラーが発生するようになった場合に、開発者からアナウンスされた新しいモデル名を設定してください。")
+        st.info("通常はこの設定は不要です。将来、新しいモデルが発表されたり、通常使用しているモデルでエラーが発生するようになった場合に新しいモデル名を設定してください。通常、放置してくださってOKです。")
 
         default_model = st.session_state.get("selected_model") or cookies.get("selected_model", "（自動選択）")
         user_override_model = cookies.get("user_custom_model")
