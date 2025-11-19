@@ -447,7 +447,7 @@ def show_login_screen():
             st.session_state.authenticated, st.session_state.user_id = True, user_id
             cookies["authenticated"], cookies["user_id"] = "True", user_id
             cookies.save(); st.rerun()
-        else: st.error("認証に失敗しました。IDが正しいか確認してください。")
+            else: st.error("認証に失敗しました。IDが正しいか確認してください。")
 
 def show_api_key_screen():
     st.success("認証に成功しました！")
